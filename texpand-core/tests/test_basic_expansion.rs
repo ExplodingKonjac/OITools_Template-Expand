@@ -82,3 +82,16 @@ fn expand_multiple_includes() {
     assert!(!result.contains("#include \"b.h\""));
     assert!(!result.contains("#include \"c.h\""));
 }
+
+#[test]
+fn pragma_once_in_dependency() {
+    let resolver = FixtureResolver::new([("a.h", "#pragma once\nint a = 1;\n")]);
+    let src = "#include \"a.h\"\nint main() { return a; }\n";
+    let result = expand_default("main.cpp", src, &resolver).unwrap();
+
+    assert!(
+        !result.contains("#pragma once"),
+        "#pragma once should be stripped from deps"
+    );
+    assert!(result.contains("int a = 1;"));
+}

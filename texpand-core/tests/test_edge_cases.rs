@@ -9,6 +9,17 @@ fn empty_file() {
 }
 
 #[test]
+fn pragma_once_stripped() {
+    let resolver = FixtureResolver::empty();
+    let result = expand_default("header.h", "#pragma once\nint a = 1;\n", &resolver).unwrap();
+    assert!(
+        !result.contains("#pragma once"),
+        "#pragma once should be stripped"
+    );
+    assert!(result.contains("int a = 1;"));
+}
+
+#[test]
 fn file_with_only_includes() {
     let resolver = FixtureResolver::new([("a.h", "int a = 1;\n"), ("b.h", "int b = 2;\n")]);
     let src = "#include \"a.h\"\n#include \"b.h\"\n";

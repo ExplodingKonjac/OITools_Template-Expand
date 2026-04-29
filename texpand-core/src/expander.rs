@@ -1,10 +1,10 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 
 use anyhow::Result;
 
 use crate::compressor;
 use crate::graph::DependencyGraph;
-use crate::parser::{Include, extract_all_includes, is_quoted_include, parse_source};
+use crate::parser::{Include, extract_all_includes, parse_source};
 use crate::resolver::FileResolver;
 
 /// Options for the expansion.
@@ -29,7 +29,6 @@ pub fn expand(
     let mut graph = DependencyGraph::new();
     let mut files: HashMap<String, String> = HashMap::new();
     let mut cleaned: HashMap<String, String> = HashMap::new();
-    let mut system_headers: HashSet<String> = HashSet::new();
 
     graph.add_file(entry_path);
     files.insert(entry_path.to_string(), entry_source.to_string());
@@ -39,31 +38,43 @@ pub fn expand(
     queue.push_back(entry_path.to_string());
 
     while let Some(path) = queue.pop_front() {
-        // Clone to avoid borrow conflicts when inserting into `files`.
+        // Synthetic system-header nodes have no real source to parse.
+        if let Some(content) = files.get(&path)
+            && path.starts_with('<')
+            && path.ends_with('>')
+        {
+            cleaned.insert(path, content.clone());
+            continue;
+        }
+
         let source = files.get(&path).expect("file source should exist").clone();
         let tree = parse_source(&source)?;
 
-        // Classify and handle includes
         for inc in extract_all_includes(&tree, &source) {
             match inc {
                 Include::Local(include_path) => {
                     graph.add_dependency(&path, include_path);
                     let (resolved_path, content) = resolver.resolve_and_read(include_path)?;
-
                     if !files.contains_key(&resolved_path) {
                         files.insert(resolved_path.clone(), content);
                         queue.push_back(resolved_path);
                     }
                 }
                 Include::System(system_path) => {
-                    graph.add_dependency(&path, system_path);
-                    system_headers.insert(system_path.to_string());
+                    let key = format!("<{system_path}>");
+                    graph.add_dependency(&path, &key);
+                    if !files.contains_key(&key) {
+                        files.insert(key.clone(), format!("#include <{system_path}>\n"));
+                        queue.push_back(key);
+                    }
                 }
             }
         }
 
-        // Strip only local `#include "..."` lines from this file
-        let stripped = strip_local_includes(&tree, &source);
+        // Strip ALL `#include` lines — both local and system — from source.
+        // Local includes are replaced by resolved content; system includes
+        // are replaced by their synthetic node (created above).
+        let stripped = strip_includes(&tree, &source);
         cleaned.insert(
             path,
             if opts.compress {
@@ -76,14 +87,11 @@ pub fn expand(
 
     let order = graph.expansion_order()?;
 
-    // Concatenate: skip system header nodes (their include lines are
-    // preserved inside the parent files and not stripped).
     let mut output = String::new();
     for path in &order {
-        if system_headers.contains(path) {
-            continue;
-        }
-        if let Some(source) = cleaned.get(path) {
+        if let Some(source) = cleaned.get(path)
+            && !source.is_empty()
+        {
             output.push_str(source);
             if !source.ends_with('\n') {
                 output.push('\n');
@@ -94,16 +102,29 @@ pub fn expand(
     Ok(output)
 }
 
-/// Remove `#include "..."` lines (quoted local includes) from source.
-/// System includes (`#include <...>`) are preserved.
-fn strip_local_includes(tree: &tree_sitter::Tree, source: &str) -> String {
+/// Remove `#include` lines and `#pragma once` from source.
+///
+/// Local includes are replaced by resolved content; system includes
+/// are replaced by a synthetic `#include <...>` node; `#pragma once`
+/// is meaningless in a single-file expansion.
+fn strip_includes(tree: &tree_sitter::Tree, source: &str) -> String {
     let mut cursor = tree.walk();
     let mut ranges: Vec<std::ops::Range<usize>> = Vec::new();
 
     loop {
         let node = cursor.node();
-        if node.kind() == "preproc_include" && is_quoted_include(&node, source) {
-            ranges.push(node.start_byte()..node.end_byte());
+        match node.kind() {
+            "preproc_include" => {
+                ranges.push(node.start_byte()..node.end_byte());
+            }
+            "preproc_call" => {
+                if let Ok(text) = node.utf8_text(source.as_bytes())
+                    && text.trim() == "#pragma once"
+                {
+                    ranges.push(node.start_byte()..node.end_byte());
+                }
+            }
+            _ => {}
         }
 
         if cursor.goto_first_child() {
@@ -195,6 +216,15 @@ mod tests {
         let result = expand_default("a.h", src_a, &MockResolver).unwrap();
         // <string> should be preserved in a.h's expanded output
         assert!(result.contains("#include <string>"));
+        assert!(result.contains("int a = 1;"));
+    }
+
+    #[test]
+    fn test_pragma_once_stripped() {
+        let src_a = "#pragma once\nint a = 1;\n";
+        let resolver = MockResolver;
+        let result = expand_default("a.h", src_a, &resolver).unwrap();
+        assert!(!result.contains("#pragma once"));
         assert!(result.contains("int a = 1;"));
     }
 
