@@ -9,6 +9,34 @@ use tree_sitter::Tree;
 /// - Concatenate symbols directly without added spaces.
 /// - After any `preproc_*` subtree, force append `'\n'`.
 pub fn compress(tree: &Tree, source: &str) -> String {
+    compress_impl(tree, source, |_node, _src| false)
+}
+
+/// Like `compress`, but also strips `#include` and `#pragma once` lines
+/// in a single tree traversal — avoiding a second parse.
+///
+/// The caller passes the **original (un-stripped)** source and tree; this
+/// function skips `preproc_include` and `#pragma once` subtrees entirely
+/// (no content emitted, no trailing `\n`).
+pub fn compress_stripped(tree: &Tree, source: &str) -> String {
+    compress_impl(tree, source, is_strip_node)
+}
+
+fn is_strip_node(node: &tree_sitter::Node, source: &str) -> bool {
+    match node.kind() {
+        "preproc_include" => true,
+        "preproc_call" => node
+            .utf8_text(source.as_bytes())
+            .is_ok_and(|t| t.trim() == "#pragma once"),
+        _ => false,
+    }
+}
+
+fn compress_impl(
+    tree: &Tree,
+    source: &str,
+    mut skip_node: impl FnMut(&tree_sitter::Node, &str) -> bool,
+) -> String {
     let mut output = String::new();
     let mut cursor = tree.walk();
     let mut prev_last: Option<char> = None;
@@ -32,7 +60,7 @@ pub fn compress(tree: &Tree, source: &str) -> String {
             prev_last = text.chars().last();
         }
 
-        if cursor.goto_first_child() {
+        if !skip_node(&node, source) && cursor.goto_first_child() {
             continue;
         }
 

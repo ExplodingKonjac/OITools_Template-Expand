@@ -71,18 +71,15 @@ pub fn expand(
             }
         }
 
-        // Strip ALL `#include` lines — both local and system — from source.
-        // Local includes are replaced by resolved content; system includes
-        // are replaced by their synthetic node (created above).
-        let stripped = strip_includes(&tree, &source);
-        cleaned.insert(
-            path,
-            if opts.compress {
-                compress_source(&stripped)
-            } else {
-                stripped
-            },
-        );
+        // Strip ALL `#include` and `#pragma once` lines.
+        // When compress is enabled, stripping + compression happens in one
+        // tree traversal (no second parse).
+        let out = if opts.compress {
+            compressor::compress_stripped(&tree, &source)
+        } else {
+            strip_includes(&tree, &source)
+        };
+        cleaned.insert(path, out);
     }
 
     let order = graph.expansion_order()?;
@@ -145,12 +142,6 @@ fn strip_includes(tree: &tree_sitter::Tree, source: &str) -> String {
             }
         }
     }
-}
-
-fn compress_source(source: &str) -> String {
-    parse_source(source)
-        .map(|tree| compressor::compress(&tree, source))
-        .unwrap_or_else(|_| source.to_string())
 }
 
 #[cfg(test)]

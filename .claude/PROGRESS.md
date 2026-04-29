@@ -78,6 +78,4 @@
 
 ## 已知技术债务
 
-1. `texpand-cli/Cargo.toml` 中 `toml = "0.8"`，可升级到 `toml = "1.0"`（当前 workspace 锁为 0.8）
-2. `expand()` 中 compress 模式下对已 strip 的源码重新 parse（二次解析开销，可优化为 AST 复用）
-3. `petgraph` 可用 v0.8，当前锁定 v0.7
+_（所有已知债务已解决）_
