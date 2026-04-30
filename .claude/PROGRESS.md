@@ -55,13 +55,13 @@
 - [x] `cargo clippy --all-targets -- -D warnings` 零警告
 - [x] `cargo fmt --all` 通过
 
-## Phase 3: texpand-cli ⏳
+## Phase 3: texpand-cli ✅
 
-- [ ] CLI args（clap）：`INPUT`, `-c`, `-o`, `--config`
-- [ ] `config.rs`：`include_paths`, `default_compress` TOML 解析
-- [ ] `FsResolver`：`FileResolver` 的 `std::fs` 实现
-- [ ] pipeline 组装
-- [ ] 集成测试（fixtures）
+- [x] CLI args（clap）：`INPUT`, `-c`, `--no-compress`, `-i`, `-o`, `-C`, `--config`
+- [x] `config.rs`：`include_paths`, `default_compress` TOML 解析
+- [x] `FsResolver`：`FileResolver` 的 `std::fs` 实现（支持 canonicalized 路径匹配）
+- [x] pipeline 组装
+- [x] 修复 expander 核心 bug：图节点键名需使用 canonicalized 路径而非原始 include 路径
 
 ## Phase 4: texpand-vscode ⏳
 

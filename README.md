@@ -20,7 +20,7 @@ Template-Expand 是一个专为 C/C++ Competitive Programming 设计的本地模
 
 ## 配置文件文档
 
-在用户配置目录 `~/.config/` 目录下创建 `.texpand` 进行自定义配置，使用 TOML 格式。
+在用户配置目录 `~/.config/` 目录下创建 `texpand.toml` 进行自定义配置，使用 TOML 格式。
 
 ```toml
 # 本地头文件搜索路径列表，按顺序查找
@@ -46,19 +46,31 @@ cargo install --path texpand-cli
 ### 基本用法
 
 ```bash
-# 展开 main.cpp 并将结果输出到标准输出 (stdout)
+# 展开 main.cpp 并将结果输出到标准输出
 texpand main.cpp
 
-# 展开 main.cpp，开启代码压缩，并将结果保存到 output.cpp
+# 展开 main.cpp，开启代码压缩，并保存到 output.cpp
 texpand main.cpp -c -o output.cpp
+
+# 展开 main.cpp，使用自定义头文件搜索路径
+texpand main.cpp -i ./templates -i ~/cp-lib
+
+# 展开 main.cpp，开启压缩，并将结果复制到剪贴板
+texpand main.cpp -c -C
+
+# 使用自定义配置文件
+texpand main.cpp --config /path/to/my-config.toml
 ```
 
 ### 参数说明
 
-- `[INPUT]`：必填，需要展开的源文件路径。
-- `-c, --compress`：可选，开启 Token 级别的代码压缩（去除注释和无用空格）。
-- `-o, --output <FILE>`：可选，指定输出文件路径。不指定则输出到标准输出。
-- `--config <FILE>`：可选，指定配置文件路径。默认读取当前目录下的 `.texpand.toml`。
+- `[INPUT]`：必填，需要展开的 C/C++ 源文件路径。
+- `-c, --compress`：开启 Token 级别的代码压缩（去除注释和无用空格）。会覆盖配置文件中的 `default_compress`。
+- `--no-compress`：禁用代码压缩。会覆盖配置文件中的 `default_compress`。
+- `-i, --include <PATH>`：可重复使用，添加头文件搜索路径。指定了任何 `-i` 后，配置文件中的 `include_paths` 将被忽略。
+- `-o, --output <FILE>`：将展开结果输出到指定文件。不指定则输出到标准输出。
+- `-C, --clipboard`：将展开结果复制到系统剪贴板（跨平台：Windows/macOS/Linux）。
+- `--config <FILE>`：指定配置文件路径。默认读取 `~/.config/texpand.toml`。
 
 `texpand-vscode` 是 `texpand` 项目的编辑器前端扩展。它通过 WebAssembly (WASM) 直接运行底层的 Rust 核心解析逻辑，在 VSCode 中提供一键展开 C/C++ 本地模板、安全压缩代码并输出到剪贴板的功能。该扩展在独立的虚拟文件系统中运行，完全不依赖本地的 `texpand-cli` 可执行文件。
 

@@ -53,8 +53,8 @@ pub fn expand(
         for inc in extract_all_includes(&tree, &source) {
             match inc {
                 Include::Local(include_path) => {
-                    graph.add_dependency(&path, include_path);
                     let (resolved_path, content) = resolver.resolve_and_read(include_path)?;
+                    graph.add_dependency(&path, &resolved_path);
                     if !files.contains_key(&resolved_path) {
                         files.insert(resolved_path.clone(), content);
                         queue.push_back(resolved_path);
