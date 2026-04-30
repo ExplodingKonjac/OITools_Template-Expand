@@ -53,7 +53,8 @@ pub fn expand(
         for inc in extract_all_includes(&tree, &source) {
             match inc {
                 Include::Local(include_path) => {
-                    let (resolved_path, content) = resolver.resolve_and_read(include_path)?;
+                    let (resolved_path, content) =
+                        resolver.resolve_and_read(&path, include_path)?;
                     graph.add_dependency(&path, &resolved_path);
                     if !files.contains_key(&resolved_path) {
                         files.insert(resolved_path.clone(), content);
@@ -152,7 +153,7 @@ mod tests {
     struct MockResolver;
 
     impl FileResolver for MockResolver {
-        fn resolve_and_read(&self, path: &str) -> Result<(String, String)> {
+        fn resolve_and_read(&self, _includer: &str, path: &str) -> Result<(String, String)> {
             match path {
                 "a.h" => Ok(("a.h".into(), "int a = 1;\n".into())),
                 "b.h" => Ok(("b.h".into(), "int b = 2;\n".into())),

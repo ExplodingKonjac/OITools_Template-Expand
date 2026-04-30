@@ -2,7 +2,10 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use texpand_core::{expander::{ExpandOptions, expand}, resolver::FileResolver};
+use texpand_core::{
+    expander::{ExpandOptions, expand},
+    resolver::FileResolver,
+};
 
 mod config;
 
@@ -52,7 +55,11 @@ impl FsResolver {
 }
 
 impl FileResolver for FsResolver {
-    fn resolve_and_read(&self, include_path: &str) -> Result<(String, String)> {
+    fn resolve_and_read(
+        &self,
+        includer_path: &str,
+        include_path: &str,
+    ) -> Result<(String, String)> {
         let path = Path::new(include_path);
 
         // Absolute path — use directly
@@ -62,7 +69,17 @@ impl FileResolver for FsResolver {
             return Ok((canonical.to_string_lossy().to_string(), content));
         }
 
-        // Search include paths in order
+        // Try relative to the includer's directory first (standard C preprocessor behavior)
+        if let Some(includer_dir) = Path::new(includer_path).parent() {
+            let candidate = includer_dir.join(path);
+            if candidate.exists() {
+                let content = std::fs::read_to_string(&candidate)?;
+                let canonical = std::fs::canonicalize(&candidate)?;
+                return Ok((canonical.to_string_lossy().to_string(), content));
+            }
+        }
+
+        // Then search configured include paths in order
         for inc_path in &self.include_paths {
             let candidate = inc_path.join(path);
             if candidate.exists() {

@@ -32,7 +32,7 @@ impl FixtureResolver {
 }
 
 impl FileResolver for FixtureResolver {
-    fn resolve_and_read(&self, path: &str) -> anyhow::Result<(String, String)> {
+    fn resolve_and_read(&self, _includer: &str, path: &str) -> anyhow::Result<(String, String)> {
         self.files
             .get(path)
             .map(|s| (path.to_string(), s.clone()))

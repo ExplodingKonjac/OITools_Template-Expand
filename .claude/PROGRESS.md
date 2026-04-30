@@ -59,9 +59,11 @@
 
 - [x] CLI args（clap）：`INPUT`, `-c`, `--no-compress`, `-i`, `-o`, `-C`, `--config`
 - [x] `config.rs`：`include_paths`, `default_compress` TOML 解析
-- [x] `FsResolver`：`FileResolver` 的 `std::fs` 实现（支持 canonicalized 路径匹配）
+- [x] `FsResolver`：`FileResolver` 的 `std::fs` 实现（支持 includer 相对路径解析）
 - [x] pipeline 组装
 - [x] 修复 expander 核心 bug：图节点键名需使用 canonicalized 路径而非原始 include 路径
+- [x] 改进 `FileResolver` trait：新增 `includer_path` 参数，支持嵌套目录相对 `#include` 解析
+- [x] 添加测试用 fixtures（`fixtures/`）：basic, deep, diamond, system-include, pragma-once, compress, multiple, nested, circular
 
 ## Phase 4: texpand-vscode ⏳
 
