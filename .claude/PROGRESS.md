@@ -6,8 +6,8 @@
 |-------|------|------|
 | 1 | Workspace 骨架搭建 | ✅ 完成 |
 | 2 | texpand-core 核心逻辑 | ✅ 完成 |
-| 3 | texpand-cli CLI 前端 | ⏳ 待开始 |
-| 4 | texpand-vscode VSCode 扩展 | ⏳ 待开始 |
+| 3 | texpand-cli CLI 前端 | ✅ 完成 |
+| 4 | texpand-vscode VSCode 扩展 | 🏗️ 进行中 |
 | 5 | 边缘 Case 加固与文档 | ⏳ 待开始 |
 
 ## Phase 1: Workspace 骨架搭建 ✅
@@ -65,12 +65,17 @@
 - [x] 改进 `FileResolver` trait：新增 `includer_path` 参数，支持嵌套目录相对 `#include` 解析
 - [x] 添加测试用 fixtures（`fixtures/`）：basic, deep, diamond, system-include, pragma-once, compress, multiple, nested, circular
 
-## Phase 4: texpand-vscode ⏳
+## Phase 4: texpand-vscode 🏗️
 
-- [ ] VSCode 扩展脚手架（yo code）
-- [ ] WASM 桥接（wasm-bindgen）
-- [ ] 文件预读 + 剪贴板输出
-- [ ] 3 个注册命令
+- [x] VSCode 扩展脚手架（yo code）
+- [x] WASM 编译（wasm32-wasip1, WASI SDK）
+- [x] `WasiFsResolver` — 利用 WASI 文件系统的 `std::fs` 实现
+- [x] 3 个注册命令（expandDefault, expandAndCopy, expandToNewFile）
+- [x] 编辑器标题栏按钮（`$(copy)` 图标，c/c++ 专用）
+- [x] 右键上下文菜单（Texpand 子菜单，含两个选项）
+- [x] 底部状态栏（配置 QuickPick：压缩、输出模式、搜索路径）
+- [ ] 端到端集成调试（需要实际 VSCode 实例加载扩展）
+- [ ] 扩展打包与发布（vsce package）
 
 ## Phase 5: 边缘 Case 加固 ⏳
 

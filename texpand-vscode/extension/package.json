@@ -1,0 +1,104 @@
+{
+  "name": "texpand-vscode",
+  "displayName": "texpand-vscode",
+  "description": "C/C++ template expansion tool — expand #include dependencies via WASM",
+  "version": "0.0.1",
+  "publisher": "explodingkonjac",
+  "engines": {
+    "vscode": "^1.118.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "texpand.expandDefault",
+        "title": "Texpand: Expand Current File (Default)"
+      },
+      {
+        "command": "texpand.expandAndCopy",
+        "title": "Texpand: Expand and Copy to Clipboard",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "texpand.expandToNewFile",
+        "title": "Texpand: Expand to New File"
+      }
+    ],
+    "configuration": {
+      "title": "Texpand",
+      "properties": {
+        "texpand.includePaths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["./"],
+          "description": "Local template header search paths. Supports workspace-relative or absolute paths."
+        },
+        "texpand.defaultCompression": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to enable token-level code compression by default."
+        },
+        "texpand.outputMode": {
+          "type": "string",
+          "enum": ["clipboard", "newFile"],
+          "default": "clipboard",
+          "enumDescriptions": [
+            "Copy expanded code to clipboard",
+            "Write expanded code to a new .expanded.cpp file"
+          ],
+          "description": "Output destination for expanded code."
+        }
+      }
+    },
+    "submenus": [
+      {
+        "id": "texpand.contextMenu",
+        "label": "Texpand"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "texpand.expandAndCopy",
+          "when": "editorLangId == c || editorLangId == cpp",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "submenu": "texpand.contextMenu",
+          "when": "editorLangId == c || editorLangId == cpp",
+          "group": "texpand"
+        }
+      ],
+      "texpand.contextMenu": [
+        {
+          "command": "texpand.expandAndCopy",
+          "group": "1_copy"
+        },
+        {
+          "command": "texpand.expandToNewFile",
+          "group": "2_newFile"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "wasm:build": "cargo build -p texpand-vscode --target wasm32-wasip1 --release && cp ../../target/wasm32-wasip1/release/texpand-vscode.wasm ./pkg/"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.118.0",
+    "@types/node": "22.x",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@vscode/wasm-wasi": "^1.0.0"
+  }
+}
