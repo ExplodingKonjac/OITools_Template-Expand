@@ -11,7 +11,14 @@
     "Programming Languages",
     "Other"
   ],
+  "activationEvents": [
+    "onLanguage:c",
+    "onLanguage:cpp"
+  ],
   "main": "./out/extension.js",
+  "extensionDependencies": [
+    "ms-vscode.wasm-wasi-core"
+  ],
   "contributes": {
     "commands": [
       {
@@ -78,11 +85,11 @@
       "texpand.contextMenu": [
         {
           "command": "texpand.expandAndCopy",
-          "group": "1_copy"
+          "group": "texpand"
         },
         {
           "command": "texpand.expandToNewFile",
-          "group": "2_newFile"
+          "group": "texpand"
         }
       ]
     }

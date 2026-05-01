@@ -31,7 +31,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     context.subscriptions.push(statusBarItem, ...commands, visibilityListener);
-    updateStatusBar(statusBarItem);
+    setTimeout(() => updateStatusBar(statusBarItem), 0);
 }
 
 export function deactivate() {
@@ -117,15 +117,15 @@ async function showConfigQuickPick(): Promise<void> {
 
     const items: vscode.QuickPickItem[] = [
         {
-            label: `$(check) Compression: ${compression ? 'On' : 'Off'}`,
+            label: `Compression: ${compression ? 'On' : 'Off'}`,
             description: compression ? 'Currently ON — code will be minified' : 'Currently OFF — code will be formatted normally',
         },
         {
-            label: `$(output) Output Mode: ${outputMode === 'clipboard' ? 'Clipboard' : 'New File'}`,
+            label: `Output Mode: ${outputMode === 'clipboard' ? 'Clipboard' : 'New File'}`,
             description: outputMode === 'clipboard' ? 'Currently: Copy to clipboard' : 'Currently: Write to .expanded.cpp file',
         },
         {
-            label: `$(folder) Include Paths: ${includePaths.length} path(s)`,
+            label: `Include Paths: ${includePaths.length} path(s)`,
             description: includePaths.join(', '),
         },
     ];

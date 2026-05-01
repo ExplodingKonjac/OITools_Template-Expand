@@ -1,13 +1,11 @@
 //! texpand-vscode: VSCode extension WASM frontend (Process mode).
 //!
-//! Launched by @vscode/wasm-wasi as a WASI process. Reads input JSON from
-//! stdin, accesses workspace files via WASI filesystem (`std::fs`), and
-//! writes result JSON to stdout.
-
-use std::io::Read;
+//! Launched by @vscode/wasm-wasi as a WASI process. Parameters passed via
+//! environment variables. Accesses workspace files via WASI filesystem
+//! (`std::fs`). Writes result JSON to stdout.
 
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use texpand_core::expander::{ExpandOptions, expand};
 use texpand_core::resolver::FileResolver;
 
@@ -52,13 +50,6 @@ impl FileResolver for WasiFsResolver {
 
 // ── Input / output ───────────────────────────────────────────────────────────
 
-#[derive(Deserialize)]
-struct ExpandInput {
-    entry_path: String,
-    include_paths: Vec<String>,
-    compress: bool,
-}
-
 #[derive(Serialize)]
 struct ExpandResult {
     success: bool,
@@ -71,36 +62,42 @@ struct ExpandResult {
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 pub fn main() {
-    let mut input = String::new();
-    if std::io::stdin().read_to_string(&mut input).is_err() {
-        println!("{}", error_json("failed to read stdin".into()));
-        return;
-    }
-
-    let input: ExpandInput = match serde_json::from_str(&input) {
-        Ok(i) => i,
+    let entry_path = match std::env::var("TEXPAND_ENTRY_PATH") {
+        Ok(p) => p,
         Err(e) => {
-            println!("{}", error_json(format!("invalid input JSON: {e}")));
+            println!("{}", error_json(format!("TEXPAND_ENTRY_PATH not set: {e}")));
             return;
         }
     };
 
-    let entry_source = match std::fs::read_to_string(&input.entry_path) {
+    let compress = std::env::var("TEXPAND_COMPRESS")
+        .map(|v| v == "true")
+        .unwrap_or(false);
+
+    let include_paths: Vec<String> = std::env::var("TEXPAND_INCLUDE_PATHS")
+        .unwrap_or_default()
+        .split(',')
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .collect();
+
+    eprintln!("[texpand] entry_path={}", entry_path);
+    eprintln!("[texpand] compress={}", compress);
+    eprintln!("[texpand] include_paths={:?}", include_paths);
+
+    let entry_source = match std::fs::read_to_string(&entry_path) {
         Ok(s) => s,
         Err(e) => {
+            eprintln!("[texpand] failed to read entry file: {e}");
             println!("{}", error_json(format!("failed to read entry file: {e}")));
             return;
         }
     };
 
-    let resolver = WasiFsResolver {
-        include_paths: input.include_paths,
-    };
-    let opts = ExpandOptions {
-        compress: input.compress,
-    };
+    let resolver = WasiFsResolver { include_paths };
+    let opts = ExpandOptions { compress };
 
-    let output = match expand(&input.entry_path, &entry_source, &resolver, &opts) {
+    let output = match expand(&entry_path, &entry_source, &resolver, &opts) {
         Ok(data) => ExpandResult {
             success: true,
             data: Some(data),
