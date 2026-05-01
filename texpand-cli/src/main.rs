@@ -1,5 +1,5 @@
 use std::{
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
 };
 
@@ -103,7 +103,6 @@ impl FileResolver for FsResolver {
 #[cfg(target_os = "linux")]
 fn run_clipboard_daemon() -> Result<()> {
     use arboard::SetExtLinux;
-    use std::io::Read;
 
     let mut text = String::new();
     std::io::stdin()
@@ -185,23 +184,29 @@ fn main() -> Result<()> {
         config.default_compress
     };
 
-    let entry_path = std::fs::canonicalize(&args.input)
-        .with_context(|| format!("cannot access '{}'", args.input.display()))?;
-    let entry_source = std::fs::read_to_string(&entry_path)
-        .with_context(|| format!("cannot read '{}'", args.input.display()))?;
+    let (entry_path, entry_source, source_dir) = if args.input.as_os_str() == "-" {
+        let mut source = String::new();
+        std::io::stdin()
+            .read_to_string(&mut source)
+            .context("failed to read source from stdin")?;
+        let cwd = std::env::current_dir().context("failed to get current directory")?;
+        ("-".to_string(), source, cwd)
+    } else {
+        let path = std::fs::canonicalize(&args.input)
+            .with_context(|| format!("cannot access '{}'", args.input.display()))?;
+        let source = std::fs::read_to_string(&path)
+            .with_context(|| format!("cannot read '{}'", args.input.display()))?;
+        let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
+        (path.to_string_lossy().to_string(), source, dir)
+    };
 
     let mut resolver_paths = Vec::new();
-    resolver_paths.push(entry_path.parent().unwrap_or(Path::new(".")).to_path_buf());
+    resolver_paths.push(source_dir);
     resolver_paths.extend(cli_include_paths);
     let resolver = FsResolver::new(resolver_paths);
 
     let opts = ExpandOptions { compress };
-    let result = expand(
-        &entry_path.to_string_lossy(),
-        &entry_source,
-        &resolver,
-        &opts,
-    )?;
+    let result = expand(&entry_path, &entry_source, &resolver, &opts)?;
 
     if args.clipboard {
         copy_to_clipboard(&result)?;

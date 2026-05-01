@@ -58,13 +58,16 @@ texpand main.cpp -i ./templates -i ~/cp-lib
 # 展开 main.cpp，开启压缩，并将结果复制到剪贴板
 texpand main.cpp -c -C
 
+# 从标准输入读取源代码
+cat main.cpp | texpand - -c
+
 # 使用自定义配置文件
 texpand main.cpp --config /path/to/my-config.toml
 ```
 
 ### 参数说明
 
-- `[INPUT]`：必填，需要展开的 C/C++ 源文件路径。
+- `[INPUT]`：必填，需要展开的 C/C++ 源文件路径。传 `-` 表示从标准输入 (stdin) 读取。
 - `-c, --compress`：开启 Token 级别的代码压缩（去除注释和无用空格）。会覆盖配置文件中的 `default_compress`。
 - `--no-compress`：禁用代码压缩。会覆盖配置文件中的 `default_compress`。
 - `-i, --include <PATH>`：可重复使用，添加头文件搜索路径。指定了任何 `-i` 后，配置文件中的 `include_paths` 将被忽略。
