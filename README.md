@@ -75,13 +75,11 @@ texpand main.cpp --config /path/to/my-config.toml
 - `-C, --clipboard`：将展开结果复制到系统剪贴板（跨平台：Windows/macOS/Linux）。
 - `--config <FILE>`：指定配置文件路径。默认读取 `~/.config/texpand.toml`。
 
+## VSCode 扩展文档
+
 `texpand-vscode` 是 `texpand` 项目的编辑器前端扩展。它通过 WebAssembly (WASM) 直接运行底层的 Rust 核心解析逻辑，在 VSCode 中提供一键展开 C/C++ 本地模板、安全压缩代码并输出到剪贴板的功能。该扩展在独立的虚拟文件系统中运行，完全不依赖本地的 `texpand-cli` 可执行文件。
 
-以下是用于 `texpand-vscode` 子目录的详细扩展开发与使用文档（可作为该模块的 `README.md`）。
-
----
-
-## VSCode 扩展文档
+以下是用于 `texpand-vscode` 子目录的详细扩展开发与使用文档。
 
 ### 核心功能
 
