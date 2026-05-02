@@ -56,6 +56,20 @@ fn is_compound_directive(kind: &str) -> bool {
     kind == "preproc_ifdef" || kind == "preproc_if"
 }
 
+/// How many non-`#` non-leaf siblings appear *before* the body content
+/// inside this directive.
+///
+/// `preproc_if` / `preproc_elif` / `preproc_elifdef`:
+///   `#if`, CONDITION(non-leaf), BODY(non-leaf) → 1 (skip condition)
+/// `preproc_ifdef` / `preproc_else` / everything else:
+///   `#ifdef`, FOO(leaf), BODY(non-leaf) → 0 (first non-leaf IS body)
+fn body_siblings_before_body(kind: &str) -> usize {
+    match kind {
+        "preproc_if" | "preproc_elif" | "preproc_elifdef" => 1,
+        _ => 0,
+    }
+}
+
 fn compress_impl(
     tree: &Tree,
     source: &str,
@@ -66,10 +80,10 @@ fn compress_impl(
     let mut prev_last: Option<char> = None;
     // How many compound preproc blocks we are currently inside of.
     let mut compound_depth: usize = 0;
-    // Set when entering a compound directive; cleared after the first
-    // `\n` is emitted before body content. Prevents inserting `\n`
-    // before every non-leaf sibling in the body.
-    let mut need_body_nl: bool = false;
+    // When inside a compound block, counts how many non-`#` non-leaf
+    // siblings to skip before the BODY starts. Once body `\n` is emitted,
+    // set to `None` to prevent further newlines within this directive.
+    let mut body_nl_counter: Option<usize> = None;
 
     loop {
         let node = cursor.node();
@@ -101,31 +115,37 @@ fn compress_impl(
             }
             if is_compound_directive(node.kind()) {
                 compound_depth += 1;
-                need_body_nl = true;
-            } else if compound_depth > 0 && is_preproc_directive(node.kind()) {
-                // `#else` / `#elif` inside a compound block — their
-                // bodies also need a leading newline.
-                need_body_nl = true;
+            }
+            // Entering any directive inside a compound block: set up the
+            // counter so the body (and only the body) gets a leading `\n`.
+            if compound_depth > 0 && is_preproc_directive(node.kind()) {
+                body_nl_counter = Some(body_siblings_before_body(node.kind()));
             }
             continue;
         }
 
         loop {
             if cursor.goto_next_sibling() {
-                // Inside a compound preproc, when we step from the
-                // directive header (#ifdef + name) into body content
-                // (a non-leaf node), insert exactly one separating
-                // newline.
+                // Inside a compound preproc, count down non-`#`, non-leaf
+                // siblings — when the counter reaches 0, the CURRENT
+                // sibling IS the body. Insert exactly one `\n`.
                 if compound_depth > 0
-                    && need_body_nl
-                    && cursor.node().child_count() > 0
-                    && !output.ends_with('\n')
+                    && let Some(ref mut remaining) = body_nl_counter
                 {
-                    let t = cursor.node().utf8_text(source.as_bytes()).unwrap_or("");
-                    if !t.starts_with('#') {
-                        output.push('\n');
-                        prev_last = None;
-                        need_body_nl = false;
+                    let n = cursor.node();
+                    if n.child_count() > 0 {
+                        let t = n.utf8_text(source.as_bytes()).unwrap_or("");
+                        if !t.starts_with('#') {
+                            if *remaining == 0 && !output.ends_with('\n') {
+                                output.push('\n');
+                                prev_last = None;
+                            }
+                            if *remaining == 0 {
+                                body_nl_counter = None;
+                            } else {
+                                *remaining = remaining.saturating_sub(1);
+                            }
+                        }
                     }
                 }
                 break;
@@ -139,6 +159,7 @@ fn compress_impl(
                 if is_compound_directive(cursor.node().kind()) {
                     compound_depth = compound_depth.saturating_sub(1);
                 }
+                body_nl_counter = None;
             }
         }
     }
@@ -280,16 +301,24 @@ mod tests {
     }
 
     #[test]
-    fn test_define() {
+    fn test_defines() {
         let src = r#"
+#ifndef _GUARD
+#define _GUARD
+#endif
 #define F(op) \
     Some Actions
 func();
         "#;
         let result = compress_source(src);
+        eprintln!("{result}");
         assert!(
             result.contains("Actions\nfunc"),
             "macro body and normal statement must be separated by newline: got {result:?}"
+        );
+        assert!(
+            result.contains("#ifndef _GUARD\n#define _GUARD"),
+            "#ifndef and #define must be separated: got {result:?}"
         );
     }
 
@@ -315,6 +344,78 @@ func();
         assert!(
             result.contains("int x;int y;"),
             "ifdef body should be compressed, not line-separated: got {result:?}"
+        );
+    }
+
+    #[test]
+    fn test_preproc_if_condition() {
+        let src = r#"
+#if defined(__linux__)
+    func1();
+#endif
+
+#if 2 > 1
+    func2();
+#else
+    func3();
+#endif
+        "#;
+        let result = compress_source(src);
+        eprintln!("{result}");
+        assert!(
+            result.starts_with("#if defined(__linux__)\nfunc1();\n#endif\n#if 2>1\nfunc2();\n#else\nfunc3();\n#endif"),
+            "unexpected output: {result:?}"
+        );
+    }
+
+    #[test]
+    fn test_ifdef_nested() {
+        let src = "#ifdef A\n#ifdef B\nint x;\n#endif\n#endif\n";
+        let result = compress_source(src);
+        assert!(
+            result.contains("#ifdef B\n"),
+            "inner ifdef on own line: {result:?}"
+        );
+        assert!(
+            result.contains("\n#endif\n#endif"),
+            "both endifs separated: {result:?}"
+        );
+    }
+
+    #[test]
+    fn test_include_guard() {
+        let src = "#ifndef H\n#define H\nint code;\n#endif\n";
+        let result = compress_source(src);
+        assert!(
+            result.contains("#ifndef H\n#define H"),
+            "guard pattern: {result:?}"
+        );
+    }
+
+    #[test]
+    fn test_ifdef_ifdef_block() {
+        let src = "#ifdef A\n#ifdef B\nint x;\nint y;\n#endif\n#endif\n";
+        let result = compress_source(src);
+        assert!(result.contains("int x;int y;"), "body compressed");
+    }
+
+    #[test]
+    fn test_empty_ifdef_body() {
+        let src = "#ifdef A\n#endif\n";
+        let result = compress_source(src);
+        assert!(
+            result.contains("#ifdef A\n#endif"),
+            "endif immediately follows"
+        );
+    }
+
+    #[test]
+    fn test_preproc_then_statement() {
+        let src = "#include \"h\"\nint x;\n";
+        let result = compress_source(src);
+        assert!(
+            result.contains("\nint x;"),
+            "newline between include and code"
         );
     }
 }
