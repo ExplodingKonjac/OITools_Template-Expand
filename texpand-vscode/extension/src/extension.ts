@@ -11,7 +11,7 @@ export function activate(context: vscode.ExtensionContext) {
     const statusBarItem = vscode.window.createStatusBarItem(
         vscode.StatusBarAlignment.Right, 100,
     );
-    statusBarItem.text = '$(beaker) Texpand';
+    statusBarItem.text = '$(file-code) Texpand';
     statusBarItem.tooltip = 'Click to configure Texpand settings';
     statusBarItem.command = 'texpand.showConfigQuickPick';
 
@@ -117,15 +117,15 @@ async function showConfigQuickPick(): Promise<void> {
 
     const items: vscode.QuickPickItem[] = [
         {
-            label: `Compression: ${compression ? 'On' : 'Off'}`,
+            label: `$(file-zip) Compression: ${compression ? 'On' : 'Off'}`,
             description: compression ? 'Currently ON — code will be minified' : 'Currently OFF — code will be formatted normally',
         },
         {
-            label: `Output Mode: ${outputMode === 'clipboard' ? 'Clipboard' : 'New File'}`,
+            label: `$(output) Output Mode: ${outputMode === 'clipboard' ? 'Clipboard' : 'New File'}`,
             description: outputMode === 'clipboard' ? 'Currently: Copy to clipboard' : 'Currently: Write to .expanded.cpp file',
         },
         {
-            label: `Include Paths: ${includePaths.length} path(s)`,
+            label: `$(list-unordered) Include Paths: ${includePaths.length} path(s)`,
             description: includePaths.join(', '),
         },
     ];

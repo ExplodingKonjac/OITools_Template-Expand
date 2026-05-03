@@ -23,7 +23,8 @@
     "commands": [
       {
         "command": "texpand.expandDefault",
-        "title": "Texpand: Expand Current File (Default)"
+        "title": "Texpand: Expand Current File (Default)",
+        "icon": "$(file-code)"
       },
       {
         "command": "texpand.expandAndCopy",
@@ -32,7 +33,8 @@
       },
       {
         "command": "texpand.expandToNewFile",
-        "title": "Texpand: Expand to New File"
+        "title": "Texpand: Expand to New File",
+        "icon": "$(new-file)"
       }
     ],
     "configuration": {
