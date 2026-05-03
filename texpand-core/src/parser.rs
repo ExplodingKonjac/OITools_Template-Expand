@@ -60,7 +60,7 @@ pub fn extract_include_paths<'a>(tree: &Tree, source: &'a str) -> Vec<&'a str> {
         .collect()
 }
 
-fn classify_include<'a>(node: &Node, source: &'a str) -> Option<Include<'a>> {
+pub fn classify_include<'a>(node: &Node, source: &'a str) -> Option<Include<'a>> {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         match child.kind() {

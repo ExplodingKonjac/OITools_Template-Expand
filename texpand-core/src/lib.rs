@@ -3,6 +3,5 @@
 
 pub mod compressor;
 pub mod expander;
-pub mod graph;
 pub mod parser;
 pub mod resolver;
