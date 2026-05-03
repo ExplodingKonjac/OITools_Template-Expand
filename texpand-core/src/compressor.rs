@@ -1,5 +1,117 @@
 use tree_sitter::Tree;
 
+// ── CompressorState: reusable compression state machine ─────────────────────
+
+/// Reusable state machine for compressing C/C++ token output during a
+/// tree-sitter tree walk.
+pub struct CompressorState {
+    pub output: String,
+    prev_last: Option<char>,
+    compound_depth: usize,
+    body_nl_counter: Option<usize>,
+}
+
+impl CompressorState {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            output: String::with_capacity(capacity),
+            prev_last: None,
+            compound_depth: 0,
+            body_nl_counter: None,
+        }
+    }
+
+    /// Ensure the output ends with a newline (used when a skipped preproc
+    /// node would have triggered `enter_preproc_directive` in the compressor).
+    pub fn ensure_newline(&mut self) {
+        if !self.output.is_empty() && !self.output.ends_with('\n') {
+            self.output.push('\n');
+            self.prev_last = None;
+        }
+    }
+
+    /// Emit a single token, applying identifier-spacing and `#`-newline rules.
+    pub fn emit_token(&mut self, text: &str) {
+        if let Some(ch) = text.chars().next() {
+            // Any `#` leaf must sit on its own line.
+            if ch == '#' && !self.output.is_empty() && !self.output.ends_with('\n') {
+                self.output.push('\n');
+            }
+            if let Some(prev) = self.prev_last
+                && is_ident_char(prev)
+                && is_ident_char(ch)
+            {
+                self.output.push(' ');
+            }
+            self.output.push_str(text);
+            self.prev_last = text.chars().last();
+        }
+    }
+
+    /// Called before entering any preproc directive node.
+    pub fn enter_preproc_directive(&mut self) {
+        if !self.output.is_empty() && !self.output.ends_with('\n') {
+            self.output.push('\n');
+            self.prev_last = None;
+        }
+    }
+
+    /// Called when entering a compound preproc directive (#ifdef, #if).
+    pub fn enter_compound_directive(&mut self, kind: &str) {
+        self.compound_depth += 1;
+        self.body_nl_counter = Some(body_siblings_before_body(kind));
+    }
+
+    /// Called after `goto_next_sibling` inside a compound preproc to detect
+    /// when the walker reaches the body.
+    pub fn on_next_sibling(&mut self, node: &tree_sitter::Node, source: &str) {
+        if self.compound_depth > 0
+            && let Some(ref mut remaining) = self.body_nl_counter
+            && node.child_count() > 0
+        {
+            let t = node.utf8_text(source.as_bytes()).unwrap_or("");
+            if !t.starts_with('#') {
+                if *remaining == 0 && !self.output.ends_with('\n') {
+                    self.output.push('\n');
+                    self.prev_last = None;
+                }
+                if *remaining == 0 {
+                    self.body_nl_counter = None;
+                } else {
+                    *remaining = remaining.saturating_sub(1);
+                }
+            }
+        }
+    }
+
+    /// Called when exiting a preproc directive (via goto_parent).
+    pub fn exit_preproc_directive(&mut self, kind: &str) {
+        self.output.push('\n');
+        self.prev_last = None;
+        if is_compound_directive(kind) {
+            self.compound_depth = self.compound_depth.saturating_sub(1);
+        }
+        self.body_nl_counter = None;
+    }
+
+    /// Called after `enter_preproc_directive` for any preproc directive
+    /// that lives inside a compound block (including `#else`, `#elif`).
+    /// Sets up the body newline counter so `on_next_sibling` can insert
+    /// `\n` before the body.
+    pub fn enter_preproc_child(&mut self, kind: &str) {
+        if self.compound_depth > 0 {
+            self.body_nl_counter = Some(body_siblings_before_body(kind));
+        }
+    }
+
+    /// Consume and return the compressed output.
+    pub fn finish(self) -> String {
+        self.output
+    }
+}
+
+// ── Public API ──────────────────────────────────────────────────────────────
+
 /// Compress C/C++ source code while preserving semantic correctness.
 ///
 /// Rules:
@@ -25,6 +137,8 @@ pub fn compress_stripped(tree: &Tree, source: &str) -> String {
     compress_impl(tree, source, is_strip_node)
 }
 
+// ── Private implementation ──────────────────────────────────────────────────
+
 fn is_strip_node(node: &tree_sitter::Node, source: &str) -> bool {
     match node.kind() {
         "preproc_include" => true,
@@ -38,21 +152,19 @@ fn is_strip_node(node: &tree_sitter::Node, source: &str) -> bool {
 /// Top-level preprocessor *directive* nodes — these open a preprocessing
 /// line or block.  Sub-element nodes like `preproc_params` and `preproc_arg`
 /// live inside a directive and must *not* trigger a separating newline.
-/// Preprocessor *sub-elements* that live inside a directive — these must
-/// NOT trigger the enter/exit newline logic.
 fn is_preproc_sub_element(kind: &str) -> bool {
     matches!(kind, "preproc_params" | "preproc_arg" | "preproc_defined")
 }
 
 /// Top-level preprocessor directive — any `preproc_*` node that is not
 /// a sub-element.
-fn is_preproc_directive(kind: &str) -> bool {
+pub(crate) fn is_preproc_directive(kind: &str) -> bool {
     kind.starts_with("preproc_") && !is_preproc_sub_element(kind)
 }
 
 /// Whether this directive node is a *compound* directive whose body
 /// spans multiple logical lines (e.g. `#ifdef … #endif`).
-fn is_compound_directive(kind: &str) -> bool {
+pub(crate) fn is_compound_directive(kind: &str) -> bool {
     kind == "preproc_ifdef" || kind == "preproc_if"
 }
 
@@ -75,15 +187,8 @@ fn compress_impl(
     source: &str,
     mut skip_node: impl FnMut(&tree_sitter::Node, &str) -> bool,
 ) -> String {
-    let mut output = String::new();
+    let mut st = CompressorState::new(source.len() / 2);
     let mut cursor = tree.walk();
-    let mut prev_last: Option<char> = None;
-    // How many compound preproc blocks we are currently inside of.
-    let mut compound_depth: usize = 0;
-    // When inside a compound block, counts how many non-`#` non-leaf
-    // siblings to skip before the BODY starts. Once body `\n` is emitted,
-    // set to `None` to prevent further newlines within this directive.
-    let mut body_nl_counter: Option<usize> = None;
 
     loop {
         let node = cursor.node();
@@ -92,82 +197,44 @@ fn compress_impl(
         if is_leaf
             && node.kind() != "comment"
             && let Ok(text) = node.utf8_text(source.as_bytes())
-            && let Some(ch) = text.chars().next()
+            && !text.is_empty()
         {
-            // Any `#` leaf must sit on its own line.
-            if ch == '#' && !output.is_empty() && !output.ends_with('\n') {
-                output.push('\n');
-            }
-            if let Some(prev) = prev_last
-                && is_ident_char(prev)
-                && is_ident_char(ch)
-            {
-                output.push(' ');
-            }
-            output.push_str(text);
-            prev_last = text.chars().last();
+            st.emit_token(text);
         }
 
         if !skip_node(&node, source) && cursor.goto_first_child() {
-            if is_preproc_directive(node.kind()) && !output.is_empty() && !output.ends_with('\n') {
-                output.push('\n');
-                prev_last = None;
+            if is_preproc_directive(node.kind()) {
+                st.enter_preproc_directive();
             }
             if is_compound_directive(node.kind()) {
-                compound_depth += 1;
+                st.enter_compound_directive(node.kind());
             }
-            // Entering any directive inside a compound block: set up the
-            // counter so the body (and only the body) gets a leading `\n`.
-            if compound_depth > 0 && is_preproc_directive(node.kind()) {
-                body_nl_counter = Some(body_siblings_before_body(node.kind()));
+            if st.compound_depth > 0 && is_preproc_directive(node.kind()) {
+                st.body_nl_counter = Some(body_siblings_before_body(node.kind()));
             }
             continue;
         }
 
         loop {
             if cursor.goto_next_sibling() {
-                // Inside a compound preproc, count down non-`#`, non-leaf
-                // siblings — when the counter reaches 0, the CURRENT
-                // sibling IS the body. Insert exactly one `\n`.
-                if compound_depth > 0
-                    && let Some(ref mut remaining) = body_nl_counter
-                {
-                    let n = cursor.node();
-                    if n.child_count() > 0 {
-                        let t = n.utf8_text(source.as_bytes()).unwrap_or("");
-                        if !t.starts_with('#') {
-                            if *remaining == 0 && !output.ends_with('\n') {
-                                output.push('\n');
-                                prev_last = None;
-                            }
-                            if *remaining == 0 {
-                                body_nl_counter = None;
-                            } else {
-                                *remaining = remaining.saturating_sub(1);
-                            }
-                        }
-                    }
-                }
+                st.on_next_sibling(&cursor.node(), source);
                 break;
             }
             if !cursor.goto_parent() {
-                return output;
+                return st.finish();
             }
             if is_preproc_directive(cursor.node().kind()) {
-                output.push('\n');
-                prev_last = None;
-                if is_compound_directive(cursor.node().kind()) {
-                    compound_depth = compound_depth.saturating_sub(1);
-                }
-                body_nl_counter = None;
+                st.exit_preproc_directive(cursor.node().kind());
             }
         }
     }
 }
 
-fn is_ident_char(c: char) -> bool {
+pub(crate) fn is_ident_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || c == '_'
 }
+
+// ── Tests ───────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
@@ -340,7 +407,6 @@ func();
     fn test_ifdef_body_compressed() {
         let src = "#ifdef FOO\nint x;\nint y;\n#endif\n";
         let result = compress_source(src);
-        // Body tokens should be compressed, not line-separated.
         assert!(
             result.contains("int x;int y;"),
             "ifdef body should be compressed, not line-separated: got {result:?}"

@@ -1,7 +1,7 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
-    compressor,
+    compressor::{self, CompressorState},
     parser::{Include, classify_include, parse_source},
     resolver::FileResolver,
 };
@@ -45,14 +45,11 @@ fn extract_subject(node: &tree_sitter::Node, source: &str) -> Subject {
     for child in node.children(&mut cursor) {
         let kind = child.kind();
 
-        // Skip the directive keyword (#if, #ifdef, etc.) and preproc_*
-        // alternative/body children that are NOT part of the condition.
         match kind {
             "preproc_directive" | "preproc_else" | "preproc_elif" | "preproc_elifdef" => continue,
             _ => {}
         }
 
-        // Also skip any child whose text starts with #
         if let Ok(text) = child.utf8_text(source.as_bytes())
             && (text.trim().starts_with('#') || text.trim().is_empty())
         {
@@ -82,7 +79,6 @@ fn collect_leaf_tokens(node: &tree_sitter::Node, source: &str, tokens: &mut Subj
 
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        // Recurse into all children of non-leaf nodes
         if child.child_count() > 0 {
             collect_leaf_tokens(&child, source, tokens);
         } else if let Ok(text) = child.utf8_text(source.as_bytes()) {
@@ -101,6 +97,8 @@ struct ExpandState<'a> {
     completed: HashSet<(String, PreprocContext)>,
     /// Files currently on the recursion stack (for cycle detection).
     expanding: HashSet<String>,
+    /// Parsed tree-sitter trees cached by file path.
+    tree_cache: HashMap<String, tree_sitter::Tree>,
     resolver: &'a dyn FileResolver,
 }
 
@@ -109,6 +107,7 @@ impl<'a> ExpandState<'a> {
         Self {
             completed: HashSet::new(),
             expanding: HashSet::new(),
+            tree_cache: HashMap::new(),
             resolver,
         }
     }
@@ -117,10 +116,6 @@ impl<'a> ExpandState<'a> {
 // ── Public API ──────────────────────────────────────────────────────────────
 
 /// Expand an entry file by recursively inlining its `#include` dependencies.
-///
-/// Expansion preserves preprocessor conditional structure by tracking the
-/// current preprocessor context stack and deduplicating includes that appear
-/// under the *same* context.
 pub fn expand(
     entry_path: &str,
     entry_source: &str,
@@ -129,14 +124,7 @@ pub fn expand(
 ) -> Result<String> {
     let mut state = ExpandState::new(resolver);
     let ctx = PreprocContext::default();
-    let output = expand_recursive(entry_path, entry_source, &ctx, &mut state)?;
-
-    if opts.compress {
-        let tree = parse_source(&output)?;
-        Ok(compressor::compress(&tree, &output))
-    } else {
-        Ok(output)
-    }
+    expand_recursive(entry_path, entry_source, &ctx, &mut state, opts.compress)
 }
 
 // ── Core recursive expansion ────────────────────────────────────────────────
@@ -146,6 +134,7 @@ fn expand_recursive(
     source: &str,
     parent_context: &PreprocContext,
     state: &mut ExpandState,
+    compress: bool,
 ) -> Result<String> {
     // Cycle detection
     if !state.expanding.insert(path.to_string()) {
@@ -157,52 +146,66 @@ fn expand_recursive(
         );
     }
 
-    let tree = parse_source(source)?;
-    let output = walk_file(&tree, source, parent_context, state)?;
-
-    state.expanding.remove(path);
-    Ok(output)
-}
-
-// ── AST walk: DFS with context stack ────────────────────────────────────────
-
-fn walk_file(
-    tree: &tree_sitter::Tree,
-    source: &str,
-    parent_context: &PreprocContext,
-    state: &mut ExpandState,
-) -> Result<String> {
-    let mut output = String::new();
+    // AST cache: avoid re-parsing the same file more than once
+    let tree = if let Some(cached) = state.tree_cache.get(path) {
+        cached.clone()
+    } else {
+        let tree = parse_source(source)?;
+        state.tree_cache.insert(path.to_string(), tree.clone());
+        tree
+    };
+    let mut output = String::with_capacity(source.len());
+    let mut byte_pos = 0;
+    let mut cs = compress.then(|| CompressorState::new(source.len() / 2));
     let mut cp = parent_context.0.clone();
-    let mut byte_pos: usize = 0;
+    let mut saved_depths = Vec::new();
     let mut cursor = tree.walk();
+
+    // ── DFS walk ──────────────────────────────────────────────────────────
 
     loop {
         let node = cursor.node();
         let node_start = node.start_byte();
         let node_end = node.end_byte();
 
+        let mut skip_children = false;
+
         match node.kind() {
             // ── #include ──────────────────────────────────────────────
             "preproc_include" => {
-                // Emit everything before this include
-                if node_start > byte_pos {
+                skip_children = true;
+                // One gap emission call — only needed in uncompressed mode.
+                if !compress && node_start > byte_pos {
                     output.push_str(&source[byte_pos..node_start]);
                 }
-                byte_pos = node_end;
+
+                // When a preproc_include node is the body of a compound
+                // directive, the compressor inserts `\n` via enter_preproc
+                // before entering children. Since we skip children of
+                // include nodes, simulate that newline here.
+                if let Some(ref mut cs) = cs {
+                    cs.ensure_newline();
+                }
 
                 let ctx = PreprocContext(cp.clone());
                 match classify_include(&node, source) {
-                    Some(Include::Local(path)) => {
-                        let key = (path.to_string(), ctx.clone());
+                    Some(Include::Local(inc_path)) => {
+                        let key = (inc_path.to_string(), ctx.clone());
                         if !state.completed.contains(&key) {
                             let (resolved_path, content) =
-                                state.resolver.resolve_and_read("", path)?;
-                            let expanded = expand_recursive(&resolved_path, &content, &ctx, state)?;
+                                state.resolver.resolve_and_read(path, inc_path)?;
+                            let expanded =
+                                expand_recursive(&resolved_path, &content, &ctx, state, compress)?;
                             state.completed.insert(key);
-                            output.push_str(&expanded);
+                            // Emit expanded content (both modes)
+                            let out = if compress {
+                                &mut cs.as_mut().unwrap().output
+                            } else {
+                                &mut output
+                            };
+                            out.push_str(&expanded);
                             if !expanded.ends_with('\n') {
-                                output.push('\n');
+                                out.push('\n');
                             }
                         }
                     }
@@ -210,36 +213,58 @@ fn walk_file(
                         let key = (format!("<{path}>"), ctx);
                         if !state.completed.contains(&key) {
                             state.completed.insert(key);
-                            // Emit the include line for first occurrence
-                            output.push_str(&source[node_start..node_end]);
+                            // Emit include line — mode-specific
+                            if compress {
+                                if let Ok(text) = node.utf8_text(source.as_bytes()) {
+                                    cs.as_mut().unwrap().emit_token(text);
+                                }
+                            } else {
+                                output.push_str(&source[node_start..node_end]);
+                            }
                         }
                     }
                     None => {}
                 }
-            }
 
-            // ── #pragma once — strip entirely (no dedup semantics) ──────────
-            "preproc_call" => {
-                if let Ok(text) = node.utf8_text(source.as_bytes())
-                    && text.trim() == "#pragma once"
-                {
-                    if node_start > byte_pos {
-                        output.push_str(&source[byte_pos..node_start]);
-                    }
+                // Advance past the include line — only needed in uncompressed
+                // mode (compressed mode never emits it for local includes,
+                // and handles system includes in the seen-or-not branch above).
+                if !compress {
                     byte_pos = node_end;
                 }
             }
 
-            // ── Compound conditional directives (push to context stack) ─
+            // ── #pragma once — strip entirely ─────────────────────────
+            "preproc_call" => {
+                if node
+                    .utf8_text(source.as_bytes())
+                    .is_ok_and(|t| t.trim() == "#pragma once")
+                {
+                    skip_children = true;
+                    if !compress && node_end > byte_pos {
+                        byte_pos = node_end;
+                    }
+                }
+                // Other preproc_call nodes (#define, #undef, etc.)
+                // fall through — children are entered naturally and
+                // leaf texts emitted by `_ =>`.
+            }
+
+            // ── Compound conditional directives ───────────────────────
             "preproc_ifdef" => {
                 cp.push(PreprocDirective::Ifdef(extract_subject(&node, source)));
+                saved_depths.push(cp.len());
             }
             "preproc_ifndef" => {
                 cp.push(PreprocDirective::Ifndef(extract_subject(&node, source)));
+                saved_depths.push(cp.len());
             }
             "preproc_if" => {
                 cp.push(PreprocDirective::If(extract_subject(&node, source)));
+                saved_depths.push(cp.len());
             }
+
+            // ── Alternative branches (just push; parent stays on stack) ─
             "preproc_else" => {
                 cp.push(PreprocDirective::Else);
             }
@@ -253,45 +278,72 @@ fn walk_file(
             // ── Everything else (leaf → emit text) ────────────────────
             _ => {
                 if node.child_count() == 0 {
-                    // Leaf node — emit original source text
-                    if node_start > byte_pos {
-                        output.push_str(&source[byte_pos..node_start]);
+                    if let Some(ref mut cs) = cs {
+                        if node.kind() != "comment"
+                            && let Ok(text) = node.utf8_text(source.as_bytes())
+                        {
+                            cs.emit_token(text);
+                        }
+                    } else {
+                        if node_start > byte_pos {
+                            output.push_str(&source[byte_pos..node_start]);
+                        }
+                        output.push_str(&source[node_start..node_end]);
+                        byte_pos = node_end;
                     }
-                    output.push_str(&source[node_start..node_end]);
-                    byte_pos = node_end;
                 }
-                // Non-leaf: byte_pos stays unchanged; children advance it
             }
         }
 
         // Enter children (skip nodes we've fully handled at this level)
-        if !matches!(node.kind(), "preproc_include" | "preproc_call") && cursor.goto_first_child() {
+        if !skip_children && cursor.goto_first_child() {
+            if let Some(ref mut cs) = cs
+                && compressor::is_preproc_directive(node.kind())
+            {
+                cs.enter_preproc_directive();
+                if compressor::is_compound_directive(node.kind()) {
+                    cs.enter_compound_directive(node.kind());
+                } else {
+                    cs.enter_preproc_child(node.kind());
+                }
+            }
             continue;
         }
 
         // Backtrack
         loop {
             if cursor.goto_next_sibling() {
+                if let Some(ref mut cs) = cs {
+                    cs.on_next_sibling(&cursor.node(), source);
+                }
                 break;
             }
             if !cursor.goto_parent() {
-                // End of traversal — emit remaining source
-                if source.len() > byte_pos {
-                    output.push_str(&source[byte_pos..]);
-                }
-                return Ok(output);
+                state.expanding.remove(path);
+                let result = if compress {
+                    cs.unwrap().finish()
+                } else {
+                    if source.len() > byte_pos {
+                        output.push_str(&source[byte_pos..]);
+                    }
+                    output
+                };
+                return Ok(result);
             }
-            // Exiting a compound directive — pop from context stack
+            // Exiting a compound directive — truncate everything added
+            // inside this block (#ifdef + any #else / #elif branches).
+            let parent_kind = cursor.node().kind();
             if matches!(
-                cursor.node().kind(),
-                "preproc_ifdef"
-                    | "preproc_ifndef"
-                    | "preproc_if"
-                    | "preproc_else"
-                    | "preproc_elif"
-                    | "preproc_elifdef"
-            ) {
-                cp.pop();
+                parent_kind,
+                "preproc_ifdef" | "preproc_ifndef" | "preproc_if"
+            ) && let Some(saved) = saved_depths.pop()
+            {
+                cp.truncate(saved - 1);
+            }
+            if let Some(ref mut cs) = cs
+                && compressor::is_preproc_directive(parent_kind)
+            {
+                cs.exit_preproc_directive(parent_kind);
             }
         }
     }
@@ -318,6 +370,10 @@ mod tests {
 
     fn expand_default(entry: &str, src: &str, resolver: &dyn FileResolver) -> Result<String> {
         expand(entry, src, resolver, &ExpandOptions::default())
+    }
+
+    fn expand_compressed(entry: &str, src: &str, resolver: &dyn FileResolver) -> Result<String> {
+        expand(entry, src, resolver, &ExpandOptions { compress: true })
     }
 
     #[test]
@@ -373,8 +429,7 @@ mod tests {
     #[test]
     fn test_expand_with_compression() {
         let src = "#include \"a.h\"\nint main() { return a; }\n";
-        let opts = ExpandOptions { compress: true };
-        let result = expand("main.cpp", src, &MockResolver, &opts).unwrap();
+        let result = expand_compressed("main.cpp", src, &MockResolver).unwrap();
         assert!(result.contains("int a=1;"));
         assert!(result.contains("int main(){return a;}"));
         assert!(!result.contains("#include \"a.h\""));
@@ -386,7 +441,6 @@ mod tests {
     fn test_same_file_same_context_dedup() {
         let src = "#include \"a.h\"\n#include \"a.h\"\n";
         let result = expand_default("main.cpp", src, &MockResolver).unwrap();
-        // a.h content should appear only once
         assert_eq!(result.matches("int a = 1;").count(), 1);
     }
 
@@ -403,12 +457,45 @@ mod tests {
     fn test_same_file_different_contexts() {
         let src = "#ifdef X\n#include \"a.h\"\n#else\n#include \"a.h\"\n#endif\n";
         let result = expand_default("main.cpp", src, &MockResolver).unwrap();
-        // a.h should appear once in each branch
         assert_eq!(
             result.matches("int a = 1;").count(),
             2,
             "a.h must be expanded in both branches"
         );
         assert!(result.contains("#ifdef X\nint a = 1;\n#else\nint a = 1;\n#endif"));
+    }
+
+    // ── Compression integration tests ───────────────────────────────────
+
+    #[test]
+    fn test_compressed_no_includes() {
+        let src = "int main() { return 0; }\n";
+        let result = expand_compressed("main.cpp", src, &MockResolver).unwrap();
+        assert_eq!(result, "int main(){return 0;}");
+    }
+
+    #[test]
+    fn test_compressed_with_local_include() {
+        let src = "#include \"a.h\"\nint main() { return a; }\n";
+        let result = expand_compressed("main.cpp", src, &MockResolver).unwrap();
+        assert!(result.contains("int a=1;"));
+        assert!(result.contains("int main(){return a;}"));
+        assert!(!result.contains("#include \"a.h\""));
+    }
+
+    #[test]
+    fn test_compressed_system_include() {
+        let src = "#include <vector>\n#include \"a.h\"\nint main() { return a; }\n";
+        let result = expand_compressed("main.cpp", src, &MockResolver).unwrap();
+        assert!(result.contains("#include<vector>") || result.contains("#include <vector>"));
+        assert!(result.contains("int a=1;"));
+    }
+
+    #[test]
+    fn test_compressed_ifdef_include() {
+        let src = "#ifdef USE_FOO\n#include \"a.h\"\n#endif\nint x;\n";
+        let result = expand_compressed("main.cpp", src, &MockResolver).unwrap();
+        assert!(result.contains("#ifdef USE_FOO\nint a=1;"));
+        assert!(result.contains("int x;"));
     }
 }
