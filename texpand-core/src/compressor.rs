@@ -30,6 +30,15 @@ impl CompressorState {
         }
     }
 
+    /// Ensure the output ends with a space (used after `#define` macro
+    /// names to separate them from the replacement text).
+    pub fn ensure_trailing_space(&mut self) {
+        if self.prev_last != Some(' ') {
+            self.output.push(' ');
+            self.prev_last = Some(' ');
+        }
+    }
+
     /// Emit a single token, applying identifier-spacing and `#`-newline rules.
     pub fn emit_token(&mut self, text: &str) {
         if let Some(ch) = text.chars().next() {
@@ -200,6 +209,16 @@ fn compress_impl(
             && !text.is_empty()
         {
             st.emit_token(text);
+            // `#define FOO …` — ensure at least one space between the
+            // macro name and the replacement text so that
+            //   #define FOO"abc"   and   #define FOO(expr)
+            // don't become syntactically wrong.
+            if cursor.field_name() == Some("name")
+                && let Some(parent) = node.parent()
+                && parent.kind() == "preproc_def"
+            {
+                st.ensure_trailing_space();
+            }
         }
 
         if !skip_node(&node, source) && cursor.goto_first_child() {
@@ -483,5 +502,24 @@ func();
             result.contains("\nint x;"),
             "newline between include and code"
         );
+    }
+
+    #[test]
+    fn test_define_space_after_name() {
+        // Object-like macros: space between name and replacement
+        let s = compress_source("#define FOO BAR\n");
+        assert!(s.contains("FOO BAR"), "#define FOO BAR: {s:?}");
+        let s = compress_source("#define FOO\"abc\"\n");
+        assert!(s.contains("FOO \"abc\""), "#define FOO\"abc\": {s:?}");
+        let s = compress_source("#define FOO (X)\n");
+        assert!(s.contains("FOO (X)"), "#define FOO (X): {s:?}");
+    }
+
+    #[test]
+    fn test_define_function_like_no_false_positive() {
+        // Function-like macros: `(` must stay immediately after the name.
+        let s = compress_source("#define FOO(x) ((x)+(x))\n");
+        assert!(!s.contains("FOO (x)"), "function-like must not get a space: {s:?}");
+        assert!(s.contains("FOO(x)"), "function-like FOO(x): {s:?}");
     }
 }
