@@ -61,5 +61,10 @@ pub fn expand_compressed(
     source: &str,
     resolver: &dyn FileResolver,
 ) -> anyhow::Result<String> {
-    expand(entry.as_ref(), source, resolver, &ExpandOptions { compress: true })
+    expand(
+        entry.as_ref(),
+        source,
+        resolver,
+        &ExpandOptions { compress: true },
+    )
 }

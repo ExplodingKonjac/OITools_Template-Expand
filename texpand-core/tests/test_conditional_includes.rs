@@ -15,10 +15,7 @@ fn include_inside_ifdef() {
 
 #[test]
 fn different_files_in_branches() {
-    let resolver = FixtureResolver::new([
-        ("a.h", "int a_val;\n"),
-        ("b.h", "int b_val;\n"),
-    ]);
+    let resolver = FixtureResolver::new([("a.h", "int a_val;\n"), ("b.h", "int b_val;\n")]);
     let src = "#ifdef A\n#include \"a.h\"\n#else\n#include \"b.h\"\n#endif\n";
     let result = expand_default("main.cpp", src, &resolver).unwrap();
 
