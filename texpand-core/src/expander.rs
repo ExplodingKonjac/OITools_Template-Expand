@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    path::{Path, PathBuf},
+};
 
 use crate::{
     compressor::{self, CompressorState},
@@ -94,11 +97,11 @@ fn collect_leaf_tokens(node: &tree_sitter::Node, source: &str, tokens: &mut Subj
 
 struct ExpandState<'a> {
     /// Files that have been fully expanded in a given context.
-    completed: HashSet<(String, PreprocContext)>,
+    completed: HashSet<(PathBuf, PreprocContext)>,
     /// Files currently on the recursion stack (for cycle detection).
-    expanding: HashSet<String>,
+    expanding: HashSet<PathBuf>,
     /// Parsed tree-sitter trees cached by file path.
-    tree_cache: HashMap<String, tree_sitter::Tree>,
+    tree_cache: HashMap<PathBuf, tree_sitter::Tree>,
     resolver: &'a dyn FileResolver,
 }
 
@@ -117,7 +120,7 @@ impl<'a> ExpandState<'a> {
 
 /// Expand an entry file by recursively inlining its `#include` dependencies.
 pub fn expand(
-    entry_path: &str,
+    entry_path: &Path,
     entry_source: &str,
     resolver: &dyn FileResolver,
     opts: &ExpandOptions,
@@ -130,19 +133,23 @@ pub fn expand(
 // ── Core recursive expansion ────────────────────────────────────────────────
 
 fn expand_recursive(
-    path: &str,
+    path: &Path,
     source: &str,
     parent_context: &PreprocContext,
     state: &mut ExpandState,
     compress: bool,
 ) -> Result<String> {
     // Cycle detection
-    if !state.expanding.insert(path.to_string()) {
+    if !state.expanding.insert(path.to_owned()) {
         let mut cycle_participants: Vec<_> = state.expanding.iter().cloned().collect();
-        cycle_participants.push(path.to_string());
+        cycle_participants.push(path.to_owned());
         bail!(
             "circular dependency detected: {}",
-            cycle_participants.join(" -> ")
+            cycle_participants
+                .iter()
+                .map(|p| format!("{}", p.display()))
+                .collect::<Vec<_>>()
+                .join(" -> ")
         );
     }
 
@@ -151,7 +158,7 @@ fn expand_recursive(
         cached.clone()
     } else {
         let tree = parse_source(source)?;
-        state.tree_cache.insert(path.to_string(), tree.clone());
+        state.tree_cache.insert(path.to_owned(), tree.clone());
         tree
     };
     let mut output = String::with_capacity(source.len());
@@ -190,37 +197,36 @@ fn expand_recursive(
                 let ctx = PreprocContext(cp.clone());
                 match classify_include(&node, source) {
                     Some(Include::Local(inc_path)) => {
-                        let key = (inc_path.to_string(), ctx.clone());
+                        let inc_path = state.resolver.resolve(path, inc_path)?;
+                        let key = (inc_path.clone(), ctx.clone());
+                        eprintln!("inc_path = {inc_path:?}, ctx = {ctx:?}");
                         if !state.completed.contains(&key) {
-                            let (resolved_path, content) =
-                                state.resolver.resolve_and_read(path, inc_path)?;
+                            let content = state.resolver.read_content(&inc_path)?;
                             let expanded =
-                                expand_recursive(&resolved_path, &content, &ctx, state, compress)?;
-                            state.completed.insert(key);
-                            // Emit expanded content (both modes)
-                            let out = if compress {
-                                &mut cs.as_mut().unwrap().output
-                            } else {
-                                &mut output
+                                expand_recursive(&inc_path, &content, &ctx, state, compress)?;
+
+                            let out = match cs.as_mut() {
+                                Some(cs) => &mut cs.output,
+                                None => &mut output,
                             };
                             out.push_str(&expanded);
                             if !expanded.ends_with('\n') {
                                 out.push('\n');
                             }
+                            state.completed.insert(key);
                         }
                     }
                     Some(Include::System(path)) => {
-                        let key = (format!("<{path}>"), ctx);
+                        let key = (format!("<{path}>").into(), ctx);
                         if !state.completed.contains(&key) {
-                            state.completed.insert(key);
-                            // Emit include line — mode-specific
-                            if compress {
+                            if let Some(cs) = cs.as_mut() {
                                 if let Ok(text) = node.utf8_text(source.as_bytes()) {
-                                    cs.as_mut().unwrap().emit_token(text);
+                                    cs.emit_token(text);
                                 }
                             } else {
                                 output.push_str(&source[node_start..node_end]);
                             }
+                            state.completed.insert(key);
                         }
                     }
                     None => {}
@@ -359,21 +365,41 @@ mod tests {
     struct MockResolver;
 
     impl FileResolver for MockResolver {
-        fn resolve_and_read(&self, _includer: &str, path: &str) -> Result<(String, String)> {
-            match path {
-                "a.h" => Ok(("a.h".into(), "int a = 1;\n".into())),
-                "b.h" => Ok(("b.h".into(), "int b = 2;\n".into())),
-                _ => bail!("file not found: {path}"),
+        fn resolve(&self, _includer_path: &Path, include_path: &str) -> Result<PathBuf> {
+            match include_path {
+                "a.h" => Ok("a.h".into()),
+                "b.h" => Ok("b.h".into()),
+                _ => bail!("file not found: {include_path}"),
+            }
+        }
+        fn read_content(&self, resolved_path: &Path) -> Result<String> {
+            match resolved_path.to_string_lossy().as_ref() {
+                "a.h" => Ok("int a = 1;\n".into()),
+                "b.h" => Ok("int b = 2;\n".into()),
+                _ => bail!("file not found: {}", resolved_path.display()),
             }
         }
     }
 
-    fn expand_default(entry: &str, src: &str, resolver: &dyn FileResolver) -> Result<String> {
-        expand(entry, src, resolver, &ExpandOptions::default())
+    fn expand_default(
+        entry: impl AsRef<Path>,
+        src: &str,
+        resolver: &dyn FileResolver,
+    ) -> Result<String> {
+        expand(entry.as_ref(), src, resolver, &ExpandOptions::default())
     }
 
-    fn expand_compressed(entry: &str, src: &str, resolver: &dyn FileResolver) -> Result<String> {
-        expand(entry, src, resolver, &ExpandOptions { compress: true })
+    fn expand_compressed(
+        entry: impl AsRef<Path>,
+        src: &str,
+        resolver: &dyn FileResolver,
+    ) -> Result<String> {
+        expand(
+            entry.as_ref(),
+            src,
+            resolver,
+            &ExpandOptions { compress: true },
+        )
     }
 
     #[test]

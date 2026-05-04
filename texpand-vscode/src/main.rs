@@ -4,7 +4,9 @@
 //! environment variables. Accesses workspace files via WASI filesystem
 //! (`std::fs`). Writes result JSON to stdout.
 
-use anyhow::Result;
+use std::path::{Path, PathBuf};
+
+use anyhow::{Context, Result};
 use serde::Serialize;
 use texpand_core::expander::{ExpandOptions, expand};
 use texpand_core::resolver::FileResolver;
@@ -16,35 +18,32 @@ struct WasiFsResolver {
 }
 
 impl FileResolver for WasiFsResolver {
-    fn resolve_and_read(
-        &self,
-        includer_path: &str,
-        include_path: &str,
-    ) -> Result<(String, String)> {
-        let path = std::path::Path::new(include_path);
+    fn resolve(&self, includer_path: &Path, include_path: &str) -> Result<PathBuf> {
+        let path = Path::new(include_path);
 
         if path.is_absolute() {
-            let content = std::fs::read_to_string(path)?;
-            return Ok((path.to_string_lossy().to_string(), content));
+            return Ok(path.into());
         }
 
-        if let Some(parent) = std::path::Path::new(includer_path).parent() {
+        if let Some(parent) = Path::new(includer_path).parent() {
             let candidate = parent.join(path);
             if candidate.exists() {
-                let content = std::fs::read_to_string(&candidate)?;
-                return Ok((candidate.to_string_lossy().to_string(), content));
+                return Ok(candidate);
             }
         }
 
         for prefix in &self.include_paths {
-            let candidate = std::path::Path::new(prefix).join(path);
+            let candidate = Path::new(prefix).join(path);
             if candidate.exists() {
-                let content = std::fs::read_to_string(&candidate)?;
-                return Ok((candidate.to_string_lossy().to_string(), content));
+                return Ok(candidate);
             }
         }
 
         anyhow::bail!("texpand: file not found in workspace: {}", include_path)
+    }
+
+    fn read_content(&self, resolved_path: &Path) -> Result<String> {
+        std::fs::read_to_string(resolved_path).with_context(|| "failed to read content")
     }
 }
 
@@ -62,8 +61,8 @@ struct ExpandResult {
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 pub fn main() {
-    let entry_path = match std::env::var("TEXPAND_ENTRY_PATH") {
-        Ok(p) => p,
+    let entry_path: PathBuf = match std::env::var("TEXPAND_ENTRY_PATH") {
+        Ok(p) => p.into(),
         Err(e) => {
             println!("{}", error_json(format!("TEXPAND_ENTRY_PATH not set: {e}")));
             return;
@@ -81,7 +80,7 @@ pub fn main() {
         .map(|s| s.to_string())
         .collect();
 
-    eprintln!("[texpand] entry_path={}", entry_path);
+    eprintln!("[texpand] entry_path={}", entry_path.display());
     eprintln!("[texpand] compress={}", compress);
     eprintln!("[texpand] include_paths={:?}", include_paths);
 

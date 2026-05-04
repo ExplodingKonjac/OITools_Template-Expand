@@ -519,7 +519,10 @@ func();
     fn test_define_function_like_no_false_positive() {
         // Function-like macros: `(` must stay immediately after the name.
         let s = compress_source("#define FOO(x) ((x)+(x))\n");
-        assert!(!s.contains("FOO (x)"), "function-like must not get a space: {s:?}");
+        assert!(
+            !s.contains("FOO (x)"),
+            "function-like must not get a space: {s:?}"
+        );
         assert!(s.contains("FOO(x)"), "function-like FOO(x): {s:?}");
     }
 }
