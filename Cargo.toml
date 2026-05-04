@@ -6,3 +6,8 @@ members = [
     "texpand-cli",
     "texpand-vscode",
 ]
+
+[profile.release]
+lto = true
+strip = true
+panic = 'abort'

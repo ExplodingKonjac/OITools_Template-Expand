@@ -63,38 +63,33 @@ impl FsResolver {
 }
 
 impl FileResolver for FsResolver {
-    fn resolve_and_read(
-        &self,
-        includer_path: &str,
-        include_path: &str,
-    ) -> Result<(String, String)> {
+    fn resolve(&self, includer_path: &Path, include_path: &str) -> Result<PathBuf> {
         let path = Path::new(include_path);
-
         if path.is_absolute() {
-            let content = std::fs::read_to_string(path)?;
-            let canonical = std::fs::canonicalize(path)?;
-            return Ok((canonical.to_string_lossy().to_string(), content));
+            return std::fs::canonicalize(path).with_context(|| "failed to canonicalize path");
         }
 
         if let Some(includer_dir) = Path::new(includer_path).parent() {
             let candidate = includer_dir.join(path);
             if candidate.exists() {
-                let content = std::fs::read_to_string(&candidate)?;
-                let canonical = std::fs::canonicalize(&candidate)?;
-                return Ok((canonical.to_string_lossy().to_string(), content));
+                return std::fs::canonicalize(candidate)
+                    .with_context(|| "failed to canonicalize path");
             }
         }
 
         for inc_path in &self.include_paths {
             let candidate = inc_path.join(path);
             if candidate.exists() {
-                let content = std::fs::read_to_string(&candidate)?;
-                let canonical = std::fs::canonicalize(&candidate)?;
-                return Ok((canonical.to_string_lossy().to_string(), content));
+                return std::fs::canonicalize(candidate)
+                    .with_context(|| "failed to canonicalize path");
             }
         }
 
         anyhow::bail!("include file not found: {include_path}")
+    }
+
+    fn read_content(&self, resolved_path: &Path) -> Result<String> {
+        std::fs::read_to_string(resolved_path).with_context(|| "failed to read content")
     }
 }
 
@@ -190,14 +185,14 @@ fn main() -> Result<()> {
             .read_to_string(&mut source)
             .context("failed to read source from stdin")?;
         let cwd = std::env::current_dir().context("failed to get current directory")?;
-        ("-".to_string(), source, cwd)
+        ("-".into(), source, cwd)
     } else {
         let path = std::fs::canonicalize(&args.input)
             .with_context(|| format!("cannot access '{}'", args.input.display()))?;
         let source = std::fs::read_to_string(&path)
             .with_context(|| format!("cannot read '{}'", args.input.display()))?;
         let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
-        (path.to_string_lossy().to_string(), source, dir)
+        (path, source, dir)
     };
 
     let mut resolver_paths = Vec::new();

@@ -6,7 +6,9 @@
 #![allow(dead_code)]
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
+use anyhow::Result;
 use texpand_core::expander::{ExpandOptions, expand};
 use texpand_core::resolver::FileResolver;
 
@@ -32,26 +34,37 @@ impl FixtureResolver {
 }
 
 impl FileResolver for FixtureResolver {
-    fn resolve_and_read(&self, _includer: &str, path: &str) -> anyhow::Result<(String, String)> {
+    fn resolve(&self, _includer_path: &Path, path: &str) -> Result<PathBuf> {
         self.files
-            .get(path)
-            .map(|s| (path.to_string(), s.clone()))
+            .contains_key(path)
+            .then(|| path.into())
             .ok_or_else(|| anyhow::anyhow!("file not found: {path}"))
+    }
+    fn read_content(&self, path: &Path) -> Result<String> {
+        self.files
+            .get(path.to_string_lossy().as_ref())
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("file not found: {}", path.display()))
     }
 }
 
 pub fn expand_default(
-    entry: &str,
+    entry: impl AsRef<Path>,
     source: &str,
     resolver: &dyn FileResolver,
 ) -> anyhow::Result<String> {
-    expand(entry, source, resolver, &ExpandOptions::default())
+    expand(entry.as_ref(), source, resolver, &ExpandOptions::default())
 }
 
 pub fn expand_compressed(
-    entry: &str,
+    entry: impl AsRef<Path>,
     source: &str,
     resolver: &dyn FileResolver,
 ) -> anyhow::Result<String> {
-    expand(entry, source, resolver, &ExpandOptions { compress: true })
+    expand(
+        entry.as_ref(),
+        source,
+        resolver,
+        &ExpandOptions { compress: true },
+    )
 }

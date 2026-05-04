@@ -6,6 +6,5 @@ edition = "2024"
 [dependencies]
 tree-sitter = "0.24"
 tree-sitter-cpp = "0.23"
-petgraph = "0.8"
 serde = { version = "1", features = ["derive"] }
 anyhow = "1"
