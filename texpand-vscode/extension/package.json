@@ -1,9 +1,14 @@
 {
   "name": "texpand-vscode",
-  "displayName": "texpand-vscode",
-  "description": "C/C++ template expansion tool — expand #include dependencies via WASM",
-  "version": "0.0.1",
+  "displayName": "Template Expand",
+  "description": "C/C++ template expansion tool — expand #include dependencies",
+  "version": "0.1.0",
   "publisher": "explodingkonjac",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ExplodingKonjac/OITools_Template-Expand"
+  },
+  "icon": "assets/icon.png",
   "engines": {
     "vscode": "^1.118.0"
   },
@@ -15,7 +20,7 @@
     "onLanguage:c",
     "onLanguage:cpp"
   ],
-  "main": "./out/extension.js",
+  "main": "./dist/extension.js",
   "extensionDependencies": [
     "ms-vscode.wasm-wasi-core"
   ],
@@ -42,8 +47,12 @@
       "properties": {
         "texpand.includePaths": {
           "type": "array",
-          "items": { "type": "string" },
-          "default": ["./"],
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "./"
+          ],
           "description": "Local template header search paths. Supports workspace-relative or absolute paths."
         },
         "texpand.defaultCompression": {
@@ -53,7 +62,10 @@
         },
         "texpand.outputMode": {
           "type": "string",
-          "enum": ["clipboard", "newFile"],
+          "enum": [
+            "clipboard",
+            "newFile"
+          ],
           "default": "clipboard",
           "enumDescriptions": [
             "Copy expanded code to clipboard",
@@ -97,17 +109,26 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "wasm:build": "cargo build -p texpand-vscode --target wasm32-wasip1 --release && cp ../../target/wasm32-wasip1/release/texpand-vscode.wasm ./pkg/"
+    "wasm:compile": "cargo build -p texpand-vscode --target wasm32-wasip1 --release",
+    "wasm:optimize": "wasm-opt -Os --bulk-memory -o ./pkg/texpand-vscode.wasm ../../target/wasm32-wasip1/release/texpand-vscode.wasm",
+    "wasm:build": "npm-run-all wasm:compile wasm:optimize",
+    "esbuild:base": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "build:ext": "npm run esbuild:base -- --minify",
+    "typecheck": "tsc --noEmit -p ./",
+    "watch": "npm run esbuild:base -- --sourcemap --watch",
+    "vscode:prepublish": "npm-run-all wasm:build build:ext",
+    "package": "vsce package"
   },
   "devDependencies": {
-    "@types/vscode": "^1.118.0",
     "@types/node": "22.x",
-    "typescript": "^5.9.3"
+    "@types/vscode": "^1.118.0",
+    "esbuild": "^0.28.0",
+    "npm-run-all2": "^8.0.4",
+    "typescript": "^5.9.3",
+    "wasm-opt": "^1.4.0"
   },
   "dependencies": {
+    "@vscode/vsce": "^3.9.1",
     "@vscode/wasm-wasi": "^1.0.0"
   }
 }

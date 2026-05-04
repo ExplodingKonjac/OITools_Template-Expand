@@ -1,71 +1,58 @@
-# texpand-vscode README
+<div align="center">
 
-This is the README for your extension "texpand-vscode". After writing up a brief description, we recommend including the following sections.
+# texpand-vscode
+
+**English** | [简体中文](https://github.com/ExplodingKonjac/OITools_Template-Expand/blob/main/texpand-vscode/extension/README.zh-CN.md)
+
+![icon](./texpand-vscode/extension/assets/icon.png)
+
+</div>
+
+`texpand-vscode` is a VSCode extension that expands all local `#include` dependencies in C/C++ source files into a single, self-contained file. It optionally performs token-level code compression while preserving semantics.
+
+The extension runs the core Rust logic via WebAssembly (WASI) — no local CLI tool or Rust toolchain required.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+- **One-click expansion**: Expand all local `#include` headers directly in the editor — via the editor title button, context menu, or command palette.
+- **Safe code compression**: Optionally strip comments and unnecessary whitespace with semantic-aware token merging that won't break your code.
+- **Zero external dependency**: The WASM engine is bundled with the extension. No binary tools or Rust environment needed.
+- **Remote development ready**: Works seamlessly with Remote-SSH, Dev Containers, and VSCode for Web via the virtual file system.
+- **Flexible output**: Copy expanded code to clipboard, or write to a `.expanded.cpp` file alongside the original.
 
-For example if there is an image subfolder under your extension project workspace:
+## Usage
 
-\!\[feature X\]\(images/feature-x.png\)
+After installing, open any C/C++ file and:
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
-
-## Requirements
-
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+1. **Editor title bar** — click the file icon button in the top-right corner to expand and copy to clipboard.
+2. **Context menu** — right-click the editor, choose an action from the **Texpand** submenu.
+3. **Command palette** — press `Ctrl+Shift+P` / `Cmd+Shift+P` and type `Texpand`.
+4. **Status bar** — click the **Texpand** button at the bottom-right to toggle compression or output mode.
 
 ## Extension Settings
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+Search for `texpand` in VSCode settings:
 
-For example:
+| Setting | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `texpand.includePaths` | `string[]` | `["./"]` | Header search paths. Supports workspace-relative or absolute paths. |
+| `texpand.defaultCompression` | `boolean` | `false` | Whether to enable code compression by default. |
+| `texpand.outputMode` | `"clipboard"` / `"newFile"` | `"clipboard"` | Output destination: clipboard, or a new `.expanded.cpp` file. |
 
-This extension contributes the following settings:
+## Commands
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+| Command | Description |
+| :--- | :--- |
+| **Texpand: Expand Current File (Default)** | Expand using the configured output mode. |
+| **Texpand: Expand and Copy to Clipboard** | Expand and copy the result to clipboard. |
+| **Texpand: Expand to New File** | Expand and write the result to a new file. |
 
 ## Known Issues
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+None yet.
 
 ## Release Notes
 
-Users appreciate release notes as you update your extension.
+### 0.1.0
 
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+Initial release. Basic expansion, compression, clipboard and file output.

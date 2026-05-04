@@ -152,7 +152,7 @@ async function showConfigQuickPick(): Promise<void> {
     } else if (pick === items[2]) {
         await vscode.commands.executeCommand(
             'workbench.action.openSettings',
-            '@ext:texpand-vscode texpand.includePaths',
+            '@ext:explodingkonjac.texpand-vscode texpand.includePaths',
         );
     }
 }
