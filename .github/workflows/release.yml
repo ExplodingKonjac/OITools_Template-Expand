@@ -1,0 +1,109 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  WASI_SDK_VERSION: "33"
+
+jobs:
+  build-cli:
+    name: build CLI (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            packages: gcc-aarch64-linux-gnu
+          - target: x86_64-apple-darwin
+            os: macos-13
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - if: matrix.packages
+        run: sudo apt-get update && sudo apt-get install -y ${{ matrix.packages }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - run: cargo build -p texpand-cli --release --target ${{ matrix.target }}
+      - name: Rename binary for distribution
+        shell: bash
+        run: |
+          exe_suffix=""
+          if [ "${{ matrix.target }}" = "x86_64-pc-windows-msvc" ]; then
+            exe_suffix=".exe"
+          fi
+          mv "target/${{ matrix.target }}/release/texpand-cli${exe_suffix}" \
+             "texpand-${{ matrix.target }}${exe_suffix}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: texpand-${{ matrix.target }}
+          path: texpand-${{ matrix.target }}*
+
+  build-vsix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+      - name: Install WASI SDK
+        run: |
+          WASI_SDK_TARBALL="wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz"
+          wget -q "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/${WASI_SDK_TARBALL}"
+          sudo mkdir -p /opt/wasi-sdk
+          sudo tar -xzf "${WASI_SDK_TARBALL}" -C /opt/wasi-sdk --strip-components=1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm32-wasip1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: texpand-vscode/extension/package-lock.json
+      - name: Build WASM and extension
+        working-directory: texpand-vscode/extension
+        run: |
+          npm ci
+          npm run vscode:prepublish
+      - name: Package VSIX
+        working-directory: texpand-vscode/extension
+        run: |
+          npm run package
+          mv texpand-vscode-*.vsix texpand-vscode-${{ github.ref_name }}.vsix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: texpand-vscode-${{ github.ref_name }}
+          path: texpand-vscode/extension/texpand-vscode-${{ github.ref_name }}.vsix
+
+  release:
+    needs: [build-cli, build-vsix]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: texpand-*
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            texpand-x86_64-unknown-linux-gnu
+            texpand-aarch64-unknown-linux-gnu
+            texpand-x86_64-apple-darwin
+            texpand-aarch64-apple-darwin
+            texpand-x86_64-pc-windows-msvc.exe
+            texpand-vscode-*.vsix
+          generate_release_notes: true
