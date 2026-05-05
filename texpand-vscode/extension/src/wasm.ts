@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { Wasm } from '@vscode/wasm-wasi/v1';
@@ -58,6 +59,21 @@ export async function expandWithProcess(
     console.log('[texpand] includePaths:', wasiIncludePaths);
     console.log('[texpand] compress:', opts.compress);
 
+    // Mount absolute include paths so the WASI process can access them.
+    const extraMountPoints: { kind: 'vscodeFileSystem'; uri: vscode.Uri; mountPoint: string }[] = [];
+    for (const p of opts.includePaths) {
+        if (path.isAbsolute(p) && fs.existsSync(p)) {
+            extraMountPoints.push({
+                kind: 'vscodeFileSystem',
+                uri: vscode.Uri.file(p),
+                mountPoint: p,
+            });
+        }
+    }
+    if (extraMountPoints.length > 0) {
+        console.log('[texpand] extra mount points:', extraMountPoints.map(m => m.mountPoint));
+    }
+
     const proc = await api.createProcess('texpand', module, {
         env: {
             TEXPAND_ENTRY_PATH: wasiEntryPath,
@@ -70,6 +86,7 @@ export async function expandWithProcess(
         },
         mountPoints: [
             { kind: 'workspaceFolder' },
+            ...extraMountPoints,
         ],
     });
 
