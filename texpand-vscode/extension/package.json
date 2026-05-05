@@ -2,7 +2,7 @@
   "name": "texpand-vscode",
   "displayName": "Template Expand",
   "description": "C/C++ template expansion tool — expand #include dependencies",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "explodingkonjac",
   "repository": {
     "type": "git",
@@ -110,12 +110,12 @@
   },
   "scripts": {
     "wasm:compile": "cargo build -p texpand-vscode --target wasm32-wasip1 --release",
-    "wasm:optimize": "wasm-opt -Os --bulk-memory -o ./pkg/texpand-vscode.wasm ../../target/wasm32-wasip1/release/texpand-vscode.wasm",
+    "wasm:optimize": "wasm-opt -Os --enable-bulk-memory --all-features -o ./pkg/texpand-vscode.wasm ../../target/wasm32-wasip1/release/texpand-vscode.wasm",
     "wasm:build": "npm-run-all wasm:compile wasm:optimize",
-    "esbuild:base": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "esbuild:base": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
     "build:ext": "npm run esbuild:base -- --minify",
     "typecheck": "tsc --noEmit -p ./",
-    "watch": "npm run esbuild:base -- --sourcemap --watch",
+    "watch": "npm run esbuild:base -- --watch=forever",
     "vscode:prepublish": "npm-run-all wasm:build build:ext",
     "package": "vsce package"
   },

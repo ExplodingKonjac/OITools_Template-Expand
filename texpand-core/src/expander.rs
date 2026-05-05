@@ -199,7 +199,6 @@ fn expand_recursive(
                     Some(Include::Local(inc_path)) => {
                         let inc_path = state.resolver.resolve(path, inc_path)?;
                         let key = (inc_path.clone(), ctx.clone());
-                        eprintln!("inc_path = {inc_path:?}, ctx = {ctx:?}");
                         if !state.completed.contains(&key) {
                             let content = state.resolver.read_content(&inc_path)?;
                             let expanded =

@@ -5,15 +5,40 @@
 	"tasks": [
 		{
 			"type": "npm",
+			"script": "esbuild:base",
+			"path": ".",
+			"group": "build",
+			"presentation": {
+				"reveal": "never"
+			}
+		},
+		{
+			"type": "npm",
 			"script": "watch",
-			"problemMatcher": "$tsc-watch",
+			"path": ".",
+			"problemMatcher": {
+				"owner": "esbuild",
+				"pattern": [
+					{
+						"regexp": "^(?:✘\\s+)?\\[ERROR\\]\\s*(.+)$",
+						"message": 1
+					},
+					{
+						"regexp": "^\\s+(?:at\\s+)?(.+):(\\d+):(\\d+):?",
+						"file": 1,
+						"line": 2,
+						"column": 3
+					}
+				],
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": "^\\S",
+					"endsPattern": "\\[watch\\] build finished"
+				}
+			},
 			"isBackground": true,
 			"presentation": {
 				"reveal": "never"
-			},
-			"group": {
-				"kind": "build",
-				"isDefault": true
 			}
 		}
 	]
