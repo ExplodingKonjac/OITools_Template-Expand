@@ -1,5 +1,5 @@
 use std::{
-    io::{Read, Write},
+    io::Read,
     path::{Path, PathBuf},
 };
 
@@ -11,11 +11,6 @@ use texpand_core::{
 };
 
 mod config;
-
-/// Internal argument used to spawn a clipboard daemon child process on Linux.
-/// The daemon reads text from stdin, sets the clipboard, and blocks with `wait()`
-/// until the clipboard is overwritten, then exits silently.
-const CLIPBOARD_DAEMON_ARG: &str = "__texpand_clipboard_daemon";
 
 #[derive(Parser)]
 #[command(
@@ -93,57 +88,24 @@ impl FileResolver for FsResolver {
     }
 }
 
-/// Run as a clipboard daemon: read text from stdin, set clipboard with `wait()`,
-/// block until overwritten, then exit.
-#[cfg(target_os = "linux")]
-fn run_clipboard_daemon() -> Result<()> {
-    use arboard::SetExtLinux;
-
-    let mut text = String::new();
-    std::io::stdin()
-        .read_to_string(&mut text)
-        .context("failed to read clipboard text from stdin")?;
-
-    let mut clipboard = arboard::Clipboard::new().context("failed to open clipboard")?;
-    clipboard
-        .set()
-        .wait()
-        .text(text)
-        .context("failed to set clipboard text")?;
-
-    Ok(())
-}
-
-#[cfg(not(target_os = "linux"))]
-fn run_clipboard_daemon() -> Result<()> {
-    unreachable!("clipboard daemon is only used on Linux")
-}
-
-/// Spawn a detached child process that holds clipboard contents alive on Linux.
+/// Fork a child process that holds clipboard contents alive on Linux.
 /// Returns immediately — the child process outlives the parent.
 #[cfg(target_os = "linux")]
 fn copy_to_clipboard(text: &str) -> Result<()> {
-    use std::process::{Command, Stdio};
+    use arboard::SetExtLinux;
+    use nix::unistd::{ForkResult, fork};
 
-    let exe = std::env::current_exe().context("failed to get current executable path")?;
+    let text = text.to_owned();
 
-    let mut child = Command::new(exe)
-        .arg(CLIPBOARD_DAEMON_ARG)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .current_dir("/")
-        .spawn()
-        .context("failed to spawn clipboard daemon process")?;
-
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(text.as_bytes())
-            .context("failed to write clipboard data to daemon")?;
-        // Drop stdin to close the pipe so the daemon can proceed
+    match unsafe { fork() }.context("failed to fork clipboard daemon")? {
+        ForkResult::Child => {
+            if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                let _ = clipboard.set().wait().text(text);
+            }
+            std::process::exit(0);
+        }
+        ForkResult::Parent { child: _ } => Ok(()),
     }
-
-    Ok(())
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -156,11 +118,6 @@ fn copy_to_clipboard(text: &str) -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    // On Linux, if invoked as a clipboard daemon, handle and exit early.
-    if std::env::args().nth(1).as_deref() == Some(CLIPBOARD_DAEMON_ARG) {
-        return run_clipboard_daemon();
-    }
-
     let args = Cli::parse();
 
     let config = config::TexpandConfig::load(args.config.as_deref())?;

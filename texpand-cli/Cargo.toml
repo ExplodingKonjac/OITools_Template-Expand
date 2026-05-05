@@ -1,6 +1,6 @@
 [package]
 name = "texpand-cli"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 
 [dependencies]
@@ -10,3 +10,6 @@ serde = { version = "1", features = ["derive"] }
 toml = "1"
 anyhow = "1"
 arboard = "3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+nix = { version = "0", features = ["process"] }
