@@ -16,7 +16,7 @@
 - [x] `texpand-core/` lib crate 创建
 - [x] `texpand-cli/` bin crate 创建
 - [x] `texpand-vscode/` cdylib crate 创建
-- [x] 依赖添加：tree-sitter, tree-sitter-cpp, petgraph, clap, serde, toml, wasm-bindgen, anyhow
+- [x] 依赖添加：tree-sitter, tree-sitter-cpp, clap, serde, toml, anyhow, @vscode/wasm-wasi
 - [x] 旧 `src/main.rs` 移除
 - [x] `cargo check --workspace` ✅
 
@@ -31,16 +31,13 @@
 - [x] `extract_include_paths()` — 仅 Local include（BFS 用）
 - [x] `is_quoted_include()` — 判断是否为本地 include
 
-### graph.rs
-- [x] `DependencyGraph` — petgraph 有向图
-- [x] `add_file()` / `add_dependency()` — 节点/边管理
-- [x] `detect_cycle()` — Tarjan SCC 环路检测
-- [x] `expansion_order()` — 逆拓扑序输出
-
 ### expander.rs
-- [x] `expand()` — BFS 全量展开
+- [x] `expand()` — DFS 递归展开（tree-sitter 游标遍历）
 - [x] Local include → strip + 递归解析
-- [x] System include → 保留原行 + 入图
+- [x] System include → 保留原行 + 缓存
+- [x] 预处理上下文跟踪（`PreprocContext`）— 同文件不同条件分支独立展开
+- [x] `#pragma once` 剥离
+- [x] 循环依赖检测（`expanding: HashSet<PathBuf>`）
 - [x] 可选 compression 分支
 
 ### compressor.rs
@@ -74,8 +71,8 @@
 - [x] 编辑器标题栏按钮（`$(copy)` 图标，c/c++ 专用）
 - [x] 右键上下文菜单（Texpand 子菜单，含两个选项）
 - [x] 底部状态栏（配置 QuickPick：压缩、输出模式、搜索路径）
-- [ ] 端到端集成调试（需要实际 VSCode 实例加载扩展）
-- [ ] 扩展打包与发布（vsce package）
+- [x] 端到端集成调试（需要实际 VSCode 实例加载扩展）
+- [x] 扩展打包与发布（vsce package）
 
 ## Phase 5: 边缘 Case 加固 ⏳
 

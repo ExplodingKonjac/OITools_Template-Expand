@@ -27,8 +27,10 @@
 ```rust
 // texpand-core/src/resolver.rs
 pub trait FileResolver {
-    // 传入 #include 后的相对路径，返回 (文件的绝对路径/标识符, 文件源码文本)
-    fn resolve_and_read(&self, include_path: &str) -> Result<(String, String), String>;
+    // 传入 includer 路径和 #include 路径，返回解析后的绝对路径
+    fn resolve(&self, includer_path: &Path, include_path: &str) -> Result<PathBuf>;
+    // 根据解析后的路径读取文件内容
+    fn read_content(&self, resolved_path: &Path) -> Result<String>;
 }
 ```
 
@@ -39,9 +41,7 @@ pub trait FileResolver {
 
 1. 利用 Tree-sitter 解析文件，过滤提取出 `preproc_include` 节点。
 2. 通过 `FileResolver` 获取文件内容。
-3. 使用 `petgraph` 构建依赖有向图。图的节点为文件路径，边为包含关系。
-4. 执行 Tarjan 算法检测是否存在环。若有环，提取环路径并抛出致命错误。
-5. 按照后序遍历 (Post-order DFS) 的顺序自底向上拼接源码。
+3. 按顺序扫描代码，递归展开。
 
 ### 3. 代码压缩安全原则
 
