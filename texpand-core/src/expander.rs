@@ -220,7 +220,7 @@ fn expand_recursive(
                         if !state.completed.contains(&key) {
                             if let Some(cs) = cs.as_mut() {
                                 if let Ok(text) = node.utf8_text(source.as_bytes()) {
-                                    cs.emit_token(text);
+                                    cs.emit_token(text, false);
                                 }
                             } else {
                                 output.push_str(&source[node_start..node_end]);
@@ -282,20 +282,19 @@ fn expand_recursive(
 
             // ── Everything else (leaf → emit text) ────────────────────
             _ => {
-                if node.child_count() == 0 {
-                    if let Some(ref mut cs) = cs {
-                        if node.kind() != "comment"
-                            && let Ok(text) = node.utf8_text(source.as_bytes())
-                        {
-                            cs.emit_token(text);
-                        }
-                    } else {
-                        if node_start > byte_pos {
-                            output.push_str(&source[byte_pos..node_start]);
-                        }
-                        output.push_str(&source[node_start..node_end]);
-                        byte_pos = node_end;
+                if node.child_count() == 0
+                    && let Some(ref mut cs) = cs
+                {
+                    if node.kind() != "comment"
+                        && let Ok(text) = node.utf8_text(source.as_bytes())
+                    {
+                        cs.emit_token(text, false);
                     }
+                    if node_start > byte_pos {
+                        output.push_str(&source[byte_pos..node_start]);
+                    }
+                    output.push_str(&source[node_start..node_end]);
+                    byte_pos = node_end;
                 }
             }
         }

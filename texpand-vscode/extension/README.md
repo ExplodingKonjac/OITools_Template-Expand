@@ -53,6 +53,10 @@ None yet.
 
 ## Release Notes
 
+### 0.1.2
+
+- Fix: user-defined literals (e.g. `123_km`) no longer get a spurious space inserted during compression.
+
 ### 0.1.0
 
 Initial release. Basic expansion, compression, clipboard and file output.
