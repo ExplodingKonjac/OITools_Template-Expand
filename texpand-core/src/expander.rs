@@ -220,7 +220,7 @@ fn expand_recursive(
                         if !state.completed.contains(&key) {
                             if let Some(cs) = cs.as_mut() {
                                 if let Ok(text) = node.utf8_text(source.as_bytes()) {
-                                    cs.emit_token(text);
+                                    cs.emit_token(text, false);
                                 }
                             } else {
                                 output.push_str(&source[node_start..node_end]);
@@ -287,9 +287,8 @@ fn expand_recursive(
                         if node.kind() != "comment"
                             && let Ok(text) = node.utf8_text(source.as_bytes())
                         {
-                            cs.emit_token(text);
+                            cs.emit_token(text, false);
                         }
-                    } else {
                         if node_start > byte_pos {
                             output.push_str(&source[byte_pos..node_start]);
                         }

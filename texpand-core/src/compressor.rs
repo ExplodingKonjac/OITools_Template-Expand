@@ -40,13 +40,18 @@ impl CompressorState {
     }
 
     /// Emit a single token, applying identifier-spacing and `#`-newline rules.
-    pub fn emit_token(&mut self, text: &str) {
+    ///
+    /// Set `skip_space_before` to `true` to suppress the identifier-space
+    /// insertion for the current token (used for `literal_suffix` inside a
+    /// `user_defined_literal` node, where `123_km` must remain `123_km`).
+    pub fn emit_token(&mut self, text: &str, skip_space_before: bool) {
         if let Some(ch) = text.chars().next() {
             // Any `#` leaf must sit on its own line.
             if ch == '#' && !self.output.is_empty() && !self.output.ends_with('\n') {
                 self.output.push('\n');
             }
-            if let Some(prev) = self.prev_last
+            if !skip_space_before
+                && let Some(prev) = self.prev_last
                 && is_ident_char(prev)
                 && is_ident_char(ch)
             {
@@ -208,7 +213,7 @@ fn compress_impl(
             && let Ok(text) = node.utf8_text(source.as_bytes())
             && !text.is_empty()
         {
-            st.emit_token(text);
+            st.emit_token(text, node.kind() == "literal_suffix");
             // `#define FOO …` — ensure at least one space between the
             // macro name and the replacement text so that
             //   #define FOO"abc"   and   #define FOO(expr)
@@ -524,5 +529,23 @@ func();
             "function-like must not get a space: {s:?}"
         );
         assert!(s.contains("FOO(x)"), "function-like FOO(x): {s:?}");
+    }
+
+    #[test]
+    fn test_user_defined_literal_no_space() {
+        // User-defined literals must not get a space between the literal
+        // and its suffix: `123_km` not `123 _km`.
+        let s = compress_source("auto x = 123_km;\n");
+        assert!(s.contains("123_km"), "user-defined literal broken: {s:?}");
+        let s = compress_source("auto y = 1.5_deg;\n");
+        assert!(
+            s.contains("1.5_deg"),
+            "user-defined float literal broken: {s:?}"
+        );
+        let s = compress_source("auto y = 114min;\n");
+        assert!(
+            s.contains("114min"),
+            "literal without '_' prefix broken: {s:?}"
+        );
     }
 }
