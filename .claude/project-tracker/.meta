@@ -1,0 +1,37 @@
+files:
+  INDEX.md:
+    baseline: 65b49e172b12d9f2eda018c1f2e146eaacaf9c10
+    updated: 2026-05-12T00:42:00Z
+  stack.md:
+    baseline: 65b49e172b12d9f2eda018c1f2e146eaacaf9c10
+    updated: 2026-05-12T00:42:00Z
+  toolchain.md:
+    baseline: 65b49e172b12d9f2eda018c1f2e146eaacaf9c10
+    updated: 2026-05-12T00:42:00Z
+  architecture.md:
+    baseline: 65b49e172b12d9f2eda018c1f2e146eaacaf9c10
+    updated: 2026-05-12T00:42:00Z
+  progress.md:
+    baseline: 65b49e172b12d9f2eda018c1f2e146eaacaf9c10
+    updated: 2026-05-12T00:42:00Z
+  implementation.md:
+    baseline: 65b49e172b12d9f2eda018c1f2e146eaacaf9c10
+    updated: 2026-05-12T00:42:00Z
+  data-model.md:
+    baseline: 65b49e172b12d9f2eda018c1f2e146eaacaf9c10
+    updated: 2026-05-12T00:42:00Z
+  api.md:
+    baseline: 65b49e172b12d9f2eda018c1f2e146eaacaf9c10
+    updated: 2026-05-12T00:42:00Z
+  deployment.md:
+    baseline: 65b49e172b12d9f2eda018c1f2e146eaacaf9c10
+    updated: 2026-05-12T00:42:00Z
+  modules/core.md:
+    baseline: 65b49e172b12d9f2eda018c1f2e146eaacaf9c10
+    updated: 2026-05-12T00:42:00Z
+  modules/cli.md:
+    baseline: 65b49e172b12d9f2eda018c1f2e146eaacaf9c10
+    updated: 2026-05-12T00:42:00Z
+  modules/vscode-extension.md:
+    baseline: 65b49e172b12d9f2eda018c1f2e146eaacaf9c10
+    updated: 2026-05-12T00:42:00Z
