@@ -2,7 +2,7 @@
   "name": "texpand-vscode",
   "displayName": "Template Expand",
   "description": "C/C++ template expansion tool — expand #include dependencies",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "publisher": "explodingkonjac",
   "repository": {
     "type": "git",
@@ -72,6 +72,11 @@
             "Write expanded code to a new .expanded.cpp file"
           ],
           "description": "Output destination for expanded code."
+        },
+        "texpand.saveBeforeExpansion": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to save the current file before expanding."
         }
       }
     },

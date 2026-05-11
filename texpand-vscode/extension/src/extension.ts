@@ -73,6 +73,10 @@ async function runExpansion(context: vscode.ExtensionContext, mode: ExpansionMod
     const entryPath = editor.document.uri.fsPath;
 
     try {
+        if (config.get<boolean>('saveBeforeExpansion', true)) {
+            await editor.document.save();
+        }
+
         const result = await vscode.window.withProgress(
             { location: vscode.ProgressLocation.Notification, title: 'Texpand: Expanding...' },
             () => expandWithProcess(context, entryPath, { compress, includePaths }),
