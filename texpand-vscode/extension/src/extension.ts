@@ -11,8 +11,8 @@ export function activate(context: vscode.ExtensionContext) {
     const statusBarItem = vscode.window.createStatusBarItem(
         vscode.StatusBarAlignment.Right, 100,
     );
-    statusBarItem.text = '$(file-code) Texpand';
-    statusBarItem.tooltip = 'Click to configure Texpand settings';
+    statusBarItem.text = vscode.l10n.t('$(file-code) Texpand');
+    statusBarItem.tooltip = vscode.l10n.t('Click to configure Texpand settings');
     statusBarItem.command = 'texpand.showConfigQuickPick';
 
     const commands = [
@@ -54,13 +54,13 @@ function updateStatusBar(item: vscode.StatusBarItem): void {
 async function runExpansion(context: vscode.ExtensionContext, mode: ExpansionMode): Promise<void> {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
-        vscode.window.showErrorMessage('Texpand: No active editor');
+        vscode.window.showErrorMessage(vscode.l10n.t('Texpand: No active editor'));
         return;
     }
 
     const langId = editor.document.languageId;
     if (langId !== 'c' && langId !== 'cpp') {
-        vscode.window.showErrorMessage('Texpand: Only C/C++ files are supported');
+        vscode.window.showErrorMessage(vscode.l10n.t('Texpand: Only C/C++ files are supported'));
         return;
     }
 
@@ -78,13 +78,13 @@ async function runExpansion(context: vscode.ExtensionContext, mode: ExpansionMod
         }
 
         const result = await vscode.window.withProgress(
-            { location: vscode.ProgressLocation.Notification, title: 'Texpand: Expanding...' },
+            { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Texpand: Expanding...') },
             () => expandWithProcess(context, entryPath, { compress, includePaths }),
         );
 
         if (actualMode === 'clipboard') {
             await vscode.env.clipboard.writeText(result);
-            vscode.window.showInformationMessage('Texpand: Expanded code copied to clipboard');
+            vscode.window.showInformationMessage(vscode.l10n.t('Texpand: Expanded code copied to clipboard'));
         } else {
             const ext = path.extname(entryPath);
             const base = entryPath.slice(0, -ext.length);
@@ -93,8 +93,8 @@ async function runExpansion(context: vscode.ExtensionContext, mode: ExpansionMod
             await vscode.workspace.fs.writeFile(newUri, Buffer.from(result, 'utf-8'));
 
             const action = await vscode.window.showInformationMessage(
-                `Texpand: Expanded to ${path.basename(newFilePath)}`,
-                'Open',
+                vscode.l10n.t('Texpand: Expanded to {0}', path.basename(newFilePath)),
+                vscode.l10n.t('Open'),
             );
             if (action === 'Open') {
                 const doc = await vscode.workspace.openTextDocument(newUri);
@@ -104,9 +104,9 @@ async function runExpansion(context: vscode.ExtensionContext, mode: ExpansionMod
     } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         if (msg.includes('circular dependency')) {
-            vscode.window.showErrorMessage(`Texpand: Circular dependency detected — ${msg}`);
+            vscode.window.showErrorMessage(vscode.l10n.t('Texpand: Circular dependency detected — {0}', msg));
         } else {
-            vscode.window.showErrorMessage(`Texpand: ${msg}`);
+            vscode.window.showErrorMessage(vscode.l10n.t('Texpand: {0}', msg));
         }
     }
 }
@@ -121,21 +121,25 @@ async function showConfigQuickPick(): Promise<void> {
 
     const items: vscode.QuickPickItem[] = [
         {
-            label: `$(file-zip) Compression: ${compression ? 'On' : 'Off'}`,
-            description: compression ? 'Currently ON — code will be minified' : 'Currently OFF — code will be formatted normally',
+            label: `$(file-zip) ${vscode.l10n.t(compression ? 'Compression: On' : 'Compression: Off')}`,
+            description: compression
+                ? vscode.l10n.t('Currently ON — code will be minified')
+                : vscode.l10n.t('Currently OFF — code will be formatted normally'),
         },
         {
-            label: `$(output) Output Mode: ${outputMode === 'clipboard' ? 'Clipboard' : 'New File'}`,
-            description: outputMode === 'clipboard' ? 'Currently: Copy to clipboard' : 'Currently: Write to .expanded.cpp file',
+            label: `$(output) ${vscode.l10n.t(outputMode === 'clipboard' ? 'Output Mode: Clipboard' : 'Output Mode: New File')}`,
+            description: outputMode === 'clipboard'
+                ? vscode.l10n.t('Currently: Copy to clipboard')
+                : vscode.l10n.t('Currently: Write to .expanded.cpp file'),
         },
         {
-            label: `$(list-unordered) Include Paths: ${includePaths.length} path(s)`,
+            label: `$(list-unordered) ${vscode.l10n.t('Include Paths: {0} path(s)', includePaths.length)}`,
             description: includePaths.join(', '),
         },
     ];
 
     const pick = await vscode.window.showQuickPick(items, {
-        placeHolder: 'Select a Texpand setting to change',
+        placeHolder: vscode.l10n.t('Select a Texpand setting to change'),
     });
 
     if (!pick) return;
@@ -145,13 +149,13 @@ async function showConfigQuickPick(): Promise<void> {
     if (pick === items[0]) {
         await config.update('defaultCompression', !compression, target);
         vscode.window.showInformationMessage(
-            `Texpand: Compression set to ${!compression ? 'On' : 'Off'}`,
+            vscode.l10n.t(!compression ? 'Texpand: Compression set to On' : 'Texpand: Compression set to Off'),
         );
     } else if (pick === items[1]) {
         const next = outputMode === 'clipboard' ? 'newFile' : 'clipboard';
         await config.update('outputMode', next, target);
         vscode.window.showInformationMessage(
-            `Texpand: Output mode set to ${next === 'clipboard' ? 'Clipboard' : 'New File'}`,
+            vscode.l10n.t(next === 'clipboard' ? 'Texpand: Output mode set to Clipboard' : 'Texpand: Output mode set to New File'),
         );
     } else if (pick === items[2]) {
         await vscode.commands.executeCommand(

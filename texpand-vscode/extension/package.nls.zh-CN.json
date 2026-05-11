@@ -1,0 +1,15 @@
+{
+  "extension.displayName": "Template Expand",
+  "extension.description": "C/C++ 模板展开工具 — 展开 #include 依赖",
+  "texpand.command.expandDefault.title": "Texpand: 展开当前文件（默认模式）",
+  "texpand.command.expandAndCopy.title": "Texpand: 展开并复制到剪贴板",
+  "texpand.command.expandToNewFile.title": "Texpand: 展开到新文件",
+  "texpand.configuration.title": "Texpand",
+  "texpand.configuration.includePaths.description": "本地模板头文件搜索路径。支持相对于工作区或绝对路径。",
+  "texpand.configuration.defaultCompression.description": "是否默认启用代码压缩。",
+  "texpand.configuration.outputMode.description": "展开后代码的输出方式。",
+  "texpand.configuration.outputMode.enumDescription.clipboard": "将展开的代码复制到剪贴板",
+  "texpand.configuration.outputMode.enumDescription.newFile": "将展开的代码写入新的 .expanded.cpp 文件",
+  "texpand.configuration.saveBeforeExpansion.description": "展开前是否保存当前文件。",
+  "texpand.submenu.label": "Texpand"
+}
