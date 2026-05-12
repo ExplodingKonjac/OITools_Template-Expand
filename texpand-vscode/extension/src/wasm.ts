@@ -111,12 +111,12 @@ export async function expandWithProcess(
     }
 
     if (exitCode !== 0) {
-        throw new Error(stderr || `Process exited with code ${exitCode}`);
+        throw new Error(stderr || vscode.l10n.t('Process exited with code {0}', exitCode));
     }
 
     const result = JSON.parse(stdout.trim());
     if (!result.success) {
-        throw new Error(result.error || 'Unknown expansion error');
+        throw new Error(result.error || vscode.l10n.t('Unknown expansion error'));
     }
     return result.data;
 }

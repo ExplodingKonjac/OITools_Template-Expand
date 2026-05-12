@@ -53,6 +53,10 @@ None yet.
 
 ## Release Notes
 
+### 0.2.0
+
+- Feature: add a configuration `saveBeforeExpansion` to control whether the current file would be saved before expansion. Default value is `true`.
+
 ### 0.1.2
 
 - Fix: user-defined literals (e.g. `123_km`) no longer get a spurious space inserted during compression.

@@ -1,56 +1,74 @@
-## 项目定位与目标
+# CLAUDE.md
 
-`texpand` 是一个 C/C++ 模板展开工具。其核心挑战在于：**在保证对所有极端 C/C++ 语法形式绝对鲁棒的前提下，实现本地代码与 VSCode 虚拟文件系统的跨端复用。**
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## 核心技术栈
+## Build & Test Commands
 
-- **开发语言**：Rust (Workspaces / Monorepo 组织形式)
-- **语法解析**：`tree-sitter` & `tree-sitter-cpp`（绝对禁止使用正则表达式匹配 C++ 语法）
-- **图算法**：`petgraph`（用于依赖路径解析和环路检测）
-- **序列化**：`serde` + `toml`
-- **WASM 绑定**：`wasm-bindgen`（用于编译 VSCode 扩展底层的 WebAssembly 模块）
+```bash
+# Build entire workspace
+cargo build --workspace
 
-## 项目结构与 Monorepo 划分
+# Run all tests
+cargo test --workspace
 
-项目包含三个子 crate，职责必须严格隔离：
+# Run a single test
+cargo test test_name
 
-1.  **`texpand-core`**：核心逻辑。**约束：** 必须保持 I/O 无关，绝对禁止直接调用 `std::fs` 或 `std::io`。所有文件读取必须通过 `FileResolver` Trait 抽象。
-2.  **`texpand-cli`**：CLI 前端。**职责：** 解析命令行参数 (clap)，实现 `FileResolver` 以读取本地磁盘文件，调用 `texpand-core` 并输出结果。
-3.  **`texpand-vscode`**：VSCode 扩展前端。**职责：** 通过 TypeScript 调用 VSCode API 读取文件，将数据传递给通过 `wasm-bindgen` 编译的 Rust WASM 模块。
+# Run tests for a specific crate
+cargo test -p texpand-core
 
-## 核心架构设计
+# Run integration tests only
+cargo test --test test_basic_expansion
 
-### 1. I/O 抽象
+# Format and lint
+cargo fmt --all
+cargo clippy --workspace -- -D warnings
 
-为了实现跨端，核心库定义了如下数据获取接口：
+# VSCode extension typecheck (from texpand-vscode/extension/)
+npm run typecheck
 
-```rust
-// texpand-core/src/resolver.rs
-pub trait FileResolver {
-    // 传入 includer 路径和 #include 路径，返回解析后的绝对路径
-    fn resolve(&self, includer_path: &Path, include_path: &str) -> Result<PathBuf>;
-    // 根据解析后的路径读取文件内容
-    fn read_content(&self, resolved_path: &Path) -> Result<String>;
-}
+# Build WASM binary for VSCode extension
+cargo build -p texpand-vscode --target wasm32-wasip1 --release
+
+# Full VSCode extension build (WASM + esbuild + package into .vsix)
+npm run vscode:prepublish  # from texpand-vscode/extension/
+npm run package            # create .vsix via vsce
 ```
 
-- CLI 端：使用 `std::fs` 根据配置的 `include_paths` 搜索并读取。
-- WASM 端：TypeScript 端封装 `vscode.workspace.fs.readFile`，Rust 端通过 `extern "C"` 导入该 JS 异步/同步函数来实现 Trait。
+## Project Architecture
 
-### 2. 依赖展开路径
+Monorepo with 3 crates — a core Rust library with two frontends (CLI + VSCode extension via WASM).
 
-1. 利用 Tree-sitter 解析文件，过滤提取出 `preproc_include` 节点。
-2. 通过 `FileResolver` 获取文件内容。
-3. 按顺序扫描代码，递归展开。
+### `texpand-core` (I/O-free core library)
+The central processing engine. **Must never call `std::fs`/`std::io` directly** — all file reading goes through the `FileResolver` trait.
 
-### 3. 代码压缩安全原则
+- **`resolver.rs`** — `FileResolver` trait: `resolve()` + `read_content()`. CLI implements via `std::fs`, VSCode via WASI filesystem.
+- **`parser.rs`** — tree-sitter C/C++ parser wrapper. `parse_source()` → AST tree, `extract_all_includes()` → Local/System include classification.
+- **`expander.rs`** — BFS-based recursive expansion. Tracks `PreprocContext` (conditional directive stack) for correct dedup inside `#ifdef`/`#if` branches. Walks the AST, processes `preproc_include`, `#pragma once`, compound conditionals.
+- **`compressor.rs`** — Token-level compressor via AST leaf walk. Drops comments, inserts space between adjacent identifier chars, forces newlines around preproc directives. `CompressorState` is a reusable state machine.
 
-代码压缩旨在减小体积，但**语义安全是最高优先级**。压缩逻辑基于 Tree-sitter 的 AST 叶子节点：
+### `texpand-cli` (CLI frontend)
+- `clap`-based argument parsing.
+- `FsResolver` implements `FileResolver` with `std::fs`.
+- Config from `~/.config/texpand.toml` (`include_paths`, `default_compress`).
+- Clipboard support via `arboard` (forks on Linux for persistence).
 
-* **注释丢弃**：直接丢弃 `kind == "comment"` 的节点。
-* **标识符隔离**：维护状态机。如果相邻的两个 Token，前一个的尾字符是 `[a-zA-Z0-9_]` 且后一个的首字符也是 `[a-zA-Z0-9_]`，则它们之间**必须强制插入一个空格**。
-* **符号紧凑**：除上述情况外，纯符号（如 `{`, `+`, `;`）之间直接拼接，不加空格。
+### `texpand-vscode` (VSCode extension frontend)
+- **Rust WASM layer** (`src/main.rs`): WASI process entry point. Reads env vars (`TEXPAND_ENTRY_PATH`, `TEXPAND_COMPRESS`, `TEXPAND_INCLUDE_PATHS`), calls `texpand-core` expand, prints JSON result to stdout.
+- **TypeScript extension** (`extension/`): Activates on C/C++ files. 3 commands: expandDefault, expandAndCopy, expandToNewFile. Loads WASM via `@vscode/wasm-wasi`, mounts workspace files, reads result.
 
-### 4. 关键边界 Case 处理 (预处理指令截断)
+### Tests
+- **Unit tests**: `#[cfg(test)] mod tests` inside each source file in `texpand-core`.
+- **Integration tests**: `texpand-core/tests/` — use `FixtureResolver` (in-memory file map implementing `FileResolver`).
+- **Fixtures**: `fixtures/` directory with real C/C++ files for CLI end-to-end testing.
 
-**注意：** C/C++ 预处理指令（`#define`, `#include` 等）对换行符敏感。基础压缩会抹除所有换行，这会导致预处理指令吞噬后续代码。在遍历 AST 时，如果游标进入任何 `preproc_*` 节点，必须在其遍历结束（离开该节点作用域）时，向输出缓冲区**强制追加一个换行符 `\n`**。
+## Key Constraints
+
+- `texpand-core` must stay I/O-free — no `std::fs`, no `std::io`. All data comes through `FileResolver`.
+- Clippy must pass with `-D warnings`.
+- Rust edition 2024; let-chains style preferred.
+- The `graph.rs` module described in ARCHITECTURE.md was inlined into `expander.rs` — the dependency graph and cycle detection live there now.
+
+## Localization
+
+VSCode extension uses `@vscode/l10n`. Localized strings in `l10n/bundle.l10n.{locale}.json`. Package manifest strings in `package.nls.{locale}.json`. To export strings for translation: `npm run l10n:export` from `texpand-vscode/extension/`.

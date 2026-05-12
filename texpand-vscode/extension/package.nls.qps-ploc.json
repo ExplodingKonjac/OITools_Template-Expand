@@ -1,0 +1,15 @@
+{
+  "extension.displayName": "Ŧḗḗḿƥŀȧȧŧḗḗ ḖḖẋƥȧȧƞḓ",
+  "extension.description": "Ƈ/Ƈ++ ŧḗḗḿƥŀȧȧŧḗḗ ḗḗẋƥȧȧƞşīǿǿƞ ŧǿǿǿǿŀ — ḗḗẋƥȧȧƞḓ #īƞƈŀŭŭḓḗḗ ḓḗḗƥḗḗƞḓḗḗƞƈīḗḗş",
+  "texpand.command.expandDefault.title": "Ŧḗḗẋƥȧȧƞḓ: ḖḖẋƥȧȧƞḓ Ƈŭŭřřḗḗƞŧ Ƒīŀḗḗ (Ḓḗḗƒȧȧŭŭŀŧ)",
+  "texpand.command.expandAndCopy.title": "Ŧḗḗẋƥȧȧƞḓ: ḖḖẋƥȧȧƞḓ ȧȧƞḓ Ƈǿǿƥẏ ŧǿǿ Ƈŀīƥƀǿǿȧȧřḓ",
+  "texpand.command.expandToNewFile.title": "Ŧḗḗẋƥȧȧƞḓ: ḖḖẋƥȧȧƞḓ ŧǿǿ Ƞḗḗẇ Ƒīŀḗḗ",
+  "texpand.configuration.title": "Ŧḗḗẋƥȧȧƞḓ",
+  "texpand.configuration.includePaths.description": "Ŀǿǿƈȧȧŀ ŧḗḗḿƥŀȧȧŧḗḗ ħḗḗȧȧḓḗḗř şḗḗȧȧřƈħ ƥȧȧŧħş. Şŭŭƥƥǿǿřŧş ẇǿǿřķşƥȧȧƈḗḗ-řḗḗŀȧȧŧīṽḗḗ ǿǿř ȧȧƀşǿǿŀŭŭŧḗḗ ƥȧȧŧħş.",
+  "texpand.configuration.defaultCompression.description": "Ẇħḗḗŧħḗḗř ŧǿǿ ḗḗƞȧȧƀŀḗḗ ŧǿǿķḗḗƞ-ŀḗḗṽḗḗŀ ƈǿǿḓḗḗ ƈǿǿḿƥřḗḗşşīǿǿƞ ƀẏ ḓḗḗƒȧȧŭŭŀŧ.",
+  "texpand.configuration.outputMode.description": "ǾǾŭŭŧƥŭŭŧ ḓḗḗşŧīƞȧȧŧīǿǿƞ ƒǿǿř ḗḗẋƥȧȧƞḓḗḗḓ ƈǿǿḓḗḗ.",
+  "texpand.configuration.outputMode.enumDescription.clipboard": "Ƈǿǿƥẏ ḗḗẋƥȧȧƞḓḗḗḓ ƈǿǿḓḗḗ ŧǿǿ ƈŀīƥƀǿǿȧȧřḓ",
+  "texpand.configuration.outputMode.enumDescription.newFile": "Ẇřīŧḗḗ ḗḗẋƥȧȧƞḓḗḗḓ ƈǿǿḓḗḗ ŧǿǿ ȧȧ ƞḗḗẇ .ḗḗẋƥȧȧƞḓḗḗḓ.ƈƥƥ ƒīŀḗḗ",
+  "texpand.configuration.saveBeforeExpansion.description": "Ẇħḗḗŧħḗḗř ŧǿǿ şȧȧṽḗḗ ŧħḗḗ ƈŭŭřřḗḗƞŧ ƒīŀḗḗ ƀḗḗƒǿǿřḗḗ ḗḗẋƥȧȧƞḓīƞɠ.",
+  "texpand.submenu.label": "Ŧḗḗẋƥȧȧƞḓ"
+}
