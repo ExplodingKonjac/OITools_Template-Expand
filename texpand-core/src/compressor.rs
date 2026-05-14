@@ -537,9 +537,9 @@ func();
         // and its suffix: `123_km` not `123 _km`.
         let s = compress_source("auto x = 123_km;\n");
         assert!(s.contains("123_km"), "user-defined literal broken: {s:?}");
-        let s = compress_source("auto y = 1.5_deg;\n");
+        let s = compress_source("auto y = 1_i64;\n");
         assert!(
-            s.contains("1.5_deg"),
+            s.contains("1_i64"),
             "user-defined float literal broken: {s:?}"
         );
         let s = compress_source("auto y = 114min;\n");

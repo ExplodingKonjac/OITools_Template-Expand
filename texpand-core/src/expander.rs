@@ -288,7 +288,7 @@ fn expand_recursive(
                     if node.kind() != "comment"
                         && let Ok(text) = node.utf8_text(source.as_bytes())
                     {
-                        cs.emit_token(text, false);
+                        cs.emit_token(text, node.kind() == "literal_suffix");
                     }
                     if node_start > byte_pos {
                         output.push_str(&source[byte_pos..node_start]);
@@ -513,6 +513,13 @@ mod tests {
         let result = expand_compressed("main.cpp", src, &MockResolver).unwrap();
         assert!(result.contains("#include<vector>") || result.contains("#include <vector>"));
         assert!(result.contains("int a=1;"));
+    }
+
+    #[test]
+    fn test_compressed_user_defined_literal() {
+        let src = "int x = 1_i64;\n";
+        let result = expand_compressed("main.cpp", src, &MockResolver).unwrap();
+        assert!(result.contains("1_i64"), "must not break user-defined literal: {result:?}");
     }
 
     #[test]
