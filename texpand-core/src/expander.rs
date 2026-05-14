@@ -519,7 +519,10 @@ mod tests {
     fn test_compressed_user_defined_literal() {
         let src = "int x = 1_i64;\n";
         let result = expand_compressed("main.cpp", src, &MockResolver).unwrap();
-        assert!(result.contains("1_i64"), "must not break user-defined literal: {result:?}");
+        assert!(
+            result.contains("1_i64"),
+            "must not break user-defined literal: {result:?}"
+        );
     }
 
     #[test]
