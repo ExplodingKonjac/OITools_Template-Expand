@@ -718,7 +718,7 @@ dependencies = [
 
 [[package]]
 name = "texpand-cli"
-version = "0.1.2"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "arboard",
@@ -731,7 +731,7 @@ dependencies = [
 
 [[package]]
 name = "texpand-core"
-version = "0.1.2"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "serde",

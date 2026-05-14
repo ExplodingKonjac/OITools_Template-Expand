@@ -3,7 +3,7 @@
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
   "l10n": "./l10n",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "explodingkonjac",
   "repository": {
     "type": "git",
